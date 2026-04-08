@@ -81,6 +81,40 @@ body {
   display: flex;
 }
 
+/* On wider screens, constrain chat messages for readability */
+@media (min-width: 768px) {
+  .chat-messages {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 1.5rem 2rem;
+  }
+
+  .chat-message {
+    padding: 0.75rem 1rem;
+    font-size: 1.1rem;
+  }
+
+  .chat-header {
+    padding: 0.75rem 2rem;
+  }
+
+  .chat-footer {
+    padding: 1rem 2rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .chat-messages {
+    max-width: 960px;
+    padding: 2rem 2.5rem;
+  }
+
+  .chat-message {
+    font-size: 1.2rem;
+  }
+}
+
 /* ===== Shared Form Elements ===== */
 input[type="text"],
 input[type="password"] {
