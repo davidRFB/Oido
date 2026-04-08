@@ -6,7 +6,9 @@
 
 let recognition = null;
 let isListening = false;
+let restartTimer = null;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const MOBILE_RESTART_DELAY = 500; // ms to wait before restarting on mobile
 
 /**
  * Check if the browser supports speech recognition.
@@ -60,13 +62,25 @@ function createRecognition(callbacks) {
   rec.onend = () => {
     // Auto-restart if we're still supposed to be listening
     if (isListening) {
-      try {
-        // Create a fresh instance each time (required on mobile)
-        recognition = createRecognition(callbacks);
-        recognition.start();
-      } catch (_e) {
-        isListening = false;
-        callbacks.onStateChange?.(false);
+      const restart = () => {
+        if (!isListening) {
+          callbacks.onStateChange?.(false);
+          return;
+        }
+        try {
+          recognition = createRecognition(callbacks);
+          recognition.start();
+        } catch (_e) {
+          isListening = false;
+          callbacks.onStateChange?.(false);
+        }
+      };
+
+      if (isMobile) {
+        // Delay restart on mobile to prevent rapid cycling
+        restartTimer = setTimeout(restart, MOBILE_RESTART_DELAY);
+      } else {
+        restart();
       }
     } else {
       callbacks.onStateChange?.(false);
@@ -75,6 +89,14 @@ function createRecognition(callbacks) {
 
   rec.onstart = () => {
     callbacks.onStateChange?.(true);
+  };
+
+  rec.onaudioend = () => {
+    // On mobile, suppress the brief "off" state between restart cycles
+    // so the UI doesn't flicker
+    if (isMobile && isListening) {
+      callbacks.onStateChange?.(true);
+    }
   };
 
   return rec;
@@ -126,6 +148,10 @@ export async function startListening(callbacks) {
  */
 export function stopListening() {
   isListening = false;
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
   if (recognition) {
     try { recognition.stop(); } catch (_e) { /* ignore */ }
     recognition = null;
