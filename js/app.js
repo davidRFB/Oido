@@ -108,22 +108,22 @@ function enterChat() {
 
   // Register presence
   registerPresence(currentUser, (users) => {
-    usersCount.textContent = `${users.length} conectado${users.length !== 1 ? "s" : ""}`;
+    usersCount.textContent = `${users.length} connected`;
   });
 
   // Check speech support
   if (!isSupported()) {
-    micStatus.textContent = "Navegador no compatible";
+    micStatus.textContent = "Browser not supported";
     micBtn.disabled = true;
   }
 }
 
 // ===== Mic Toggle =====
 
-micBtn.addEventListener("click", () => {
-  const nowListening = toggleListening({
+micBtn.addEventListener("click", async () => {
+  micBtn.disabled = true;
+  const result = await toggleListening({
     onInterim: (text) => {
-      // Update or create interim message display
       if (interimElement) {
         interimElement.querySelector(".chat-text").textContent = text;
       } else {
@@ -138,38 +138,37 @@ micBtn.addEventListener("click", () => {
     },
 
     onFinal: (text) => {
-      // Remove interim element
       if (interimElement) {
         interimElement.remove();
         interimElement = null;
       }
-      // Send final message to Firebase
       sendMessage(currentUser, text, true);
     },
 
     onError: (event) => {
       console.error("Speech error:", event);
       micStatus.textContent = "Error: " + (event.error || event.message);
+      micBtn.classList.remove("listening");
     },
 
     onStateChange: (listening) => {
       if (listening) {
         micBtn.classList.add("listening");
-        micStatus.textContent = "Escuchando...";
+        micStatus.textContent = "Listening...";
       } else {
         micBtn.classList.remove("listening");
-        micStatus.textContent = "Toca para hablar";
+        micStatus.textContent = "Tap to speak";
       }
     },
   });
+  micBtn.disabled = false;
 
-  // Immediate visual feedback
-  if (nowListening) {
+  if (result) {
     micBtn.classList.add("listening");
-    micStatus.textContent = "Escuchando...";
+    micStatus.textContent = "Listening...";
   } else {
     micBtn.classList.remove("listening");
-    micStatus.textContent = "Toca para hablar";
+    micStatus.textContent = "Tap to speak";
   }
 });
 

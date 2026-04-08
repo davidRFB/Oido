@@ -23,9 +23,19 @@ export function isSupported() {
  * @param {function} callbacks.onStateChange - called with boolean (true=listening)
  * @returns {boolean} true if started successfully
  */
-export function startListening({ onInterim, onFinal, onError, onStateChange }) {
+export async function startListening({ onInterim, onFinal, onError, onStateChange }) {
   if (!isSupported()) {
     onError?.({ error: "not-supported", message: "Speech recognition not supported in this browser" });
+    return false;
+  }
+
+  // Request mic permission before starting speech recognition
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Stop the stream immediately - we just needed the permission
+    stream.getTracks().forEach((track) => track.stop());
+  } catch (_e) {
+    onError?.({ error: "not-allowed", message: "Microphone permission denied. Enable it in browser settings." });
     return false;
   }
 
@@ -103,14 +113,13 @@ export function stopListening() {
  * @param {object} callbacks - same as startListening
  * @returns {boolean} new listening state
  */
-export function toggleListening(callbacks) {
+export async function toggleListening(callbacks) {
   if (isListening) {
     stopListening();
     callbacks.onStateChange?.(false);
     return false;
   } else {
-    startListening(callbacks);
-    return true;
+    return await startListening(callbacks);
   }
 }
 
