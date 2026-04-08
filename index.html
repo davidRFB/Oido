@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oido - Chat de Voz</title>
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Firebase SDK (modular, from CDN) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import {
+      getDatabase, ref, push, set, onChildAdded, onValue, onDisconnect
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+    // Expose Firebase functions globally for our modules
+    window.firebase = {
+      initializeApp, getDatabase, ref, push, set,
+      onChildAdded, onValue, onDisconnect,
+      database: getDatabase,
+    };
+
+    // Now load our app
+    import("./js/app.js");
+  </script>
+</head>
+<body>
+
+  <!-- Screen 1: Password -->
+  <div id="password-screen" class="screen active">
+    <h1>Oido</h1>
+    <p>Ingresa la clave para entrar a la sala</p>
+    <input type="password" id="password-input" placeholder="Clave" autocomplete="off">
+    <div class="error-text" id="password-error"></div>
+    <button class="btn" id="password-btn">Entrar</button>
+  </div>
+
+  <!-- Screen 2: Name & Color Setup -->
+  <div id="setup-screen" class="screen">
+    <h2>Tu nombre y color</h2>
+    <input type="text" id="name-input" placeholder="Tu nombre" autocomplete="off" maxlength="20">
+    <div class="color-picker" id="color-picker"></div>
+    <div class="error-text" id="setup-error"></div>
+    <button class="btn" id="setup-btn">Unirse</button>
+  </div>
+
+  <!-- Screen 3: Chat Room -->
+  <div id="chat-screen" class="screen">
+    <div class="chat-header">
+      <h2>Oido</h2>
+      <span class="users-count" id="users-count"></span>
+    </div>
+
+    <div class="chat-messages" id="chat-messages">
+      <!-- Messages will be rendered here -->
+    </div>
+
+    <div class="chat-footer">
+      <span class="mic-status" id="mic-status">Toca para hablar</span>
+      <button class="mic-btn" id="mic-btn" title="Activar microfono">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" x2="12" y1="19" y2="22"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+</body>
+</html>

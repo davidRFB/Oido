@@ -1,0 +1,24 @@
+{
+  "name": "oido",
+  "version": "0.1.0",
+  "description": "Real-time speech-to-text chat room for the deaf community",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint js/",
+    "lint:fix": "eslint js/ --fix",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "@eslint/js": "^9.0.0",
+    "globals": "^15.0.0",
+    "husky": "^9.0.0",
+    "vitest": "^3.0.0",
+    "jsdom": "^25.0.0"
+  },
+  "keywords": ["deaf", "accessibility", "speech-to-text", "chat"],
+  "license": "MIT"
+}
