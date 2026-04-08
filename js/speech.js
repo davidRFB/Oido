@@ -49,7 +49,7 @@ function createRecognition(callbacks) {
       recognition = null;
       callbacks.onError?.({
         error: event.error,
-        message: "Speech service not available. Try restarting your browser.",
+        message: "Servicio de voz no disponible. Reinicia el navegador.",
       });
       callbacks.onStateChange?.(false);
       return;
@@ -91,7 +91,7 @@ function createRecognition(callbacks) {
  */
 export async function startListening(callbacks) {
   if (!isSupported()) {
-    callbacks.onError?.({ error: "not-supported", message: "Speech recognition not supported in this browser" });
+    callbacks.onError?.({ error: "not-supported", message: "Reconocimiento de voz no compatible con este navegador" });
     return false;
   }
 
@@ -100,7 +100,7 @@ export async function startListening(callbacks) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((track) => track.stop());
   } catch (_e) {
-    callbacks.onError?.({ error: "not-allowed", message: "Microphone permission denied. Enable it in browser settings." });
+    callbacks.onError?.({ error: "not-allowed", message: "Permiso de microfono denegado. Activalo en ajustes del navegador." });
     return false;
   }
 
@@ -116,7 +116,7 @@ export async function startListening(callbacks) {
     isListening = true;
     return true;
   } catch (_e) {
-    callbacks.onError?.({ error: "start-failed", message: "Failed to start speech recognition" });
+    callbacks.onError?.({ error: "start-failed", message: "No se pudo iniciar el reconocimiento de voz" });
     return false;
   }
 }

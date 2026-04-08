@@ -166,7 +166,7 @@ function enterChat() {
   if (currentUser.readOnly) {
     chatFooter.classList.add("hidden");
   } else if (!isSupported()) {
-    micStatus.textContent = "Browser not supported";
+    micStatus.textContent = "Navegador no compatible";
     micBtn.disabled = true;
   }
 }
@@ -200,17 +200,17 @@ micBtn.addEventListener("click", async () => {
 
     onError: (event) => {
       console.error("Speech error:", event);
-      micStatus.textContent = "Error: " + (event.error || event.message);
+      micStatus.textContent = "Error: " + (event.message || event.error);
       micBtn.classList.remove("listening");
     },
 
     onStateChange: (listening) => {
       if (listening) {
         micBtn.classList.add("listening");
-        micStatus.textContent = "Listening...";
+        micStatus.textContent = "Escuchando...";
       } else {
         micBtn.classList.remove("listening");
-        micStatus.textContent = "Tap to speak";
+        micStatus.textContent = "Toca para hablar";
       }
     },
   });
@@ -218,10 +218,10 @@ micBtn.addEventListener("click", async () => {
 
   if (result) {
     micBtn.classList.add("listening");
-    micStatus.textContent = "Listening...";
+    micStatus.textContent = "Escuchando...";
   } else {
     micBtn.classList.remove("listening");
-    micStatus.textContent = "Tap to speak";
+    micStatus.textContent = "Toca para hablar";
   }
 });
 
