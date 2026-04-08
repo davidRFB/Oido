@@ -162,12 +162,15 @@ function enterChat() {
     }
   });
 
-  // Hide mic for read-only users
+  // Hide mic for read-only users, auto-start for speakers
   if (currentUser.readOnly) {
     chatFooter.classList.add("hidden");
   } else if (!isSupported()) {
     micStatus.textContent = "Navegador no compatible";
     micBtn.disabled = true;
+  } else {
+    // Auto-start listening
+    micBtn.click();
   }
 }
 
