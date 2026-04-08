@@ -13,17 +13,41 @@ const passwordError = document.getElementById("password-error");
 
 const nameInput = document.getElementById("name-input");
 const colorPicker = document.getElementById("color-picker");
+const readonlyToggle = document.getElementById("readonly-toggle");
 const setupBtn = document.getElementById("setup-btn");
 const setupError = document.getElementById("setup-error");
 
 const chatMessages = document.getElementById("chat-messages");
+const chatFooter = document.querySelector(".chat-footer");
 const micBtn = document.getElementById("mic-btn");
 const micStatus = document.getElementById("mic-status");
+const usersBtn = document.getElementById("users-btn");
 const usersCount = document.getElementById("users-count");
+const usersList = document.getElementById("users-list");
+const fontDecrease = document.getElementById("font-decrease");
+const fontIncrease = document.getElementById("font-increase");
 
 let currentUser = null;
 let selectedColor = null;
 let interimElement = null;
+
+// ===== Font Size Control =====
+const FONT_SIZES = [0.9, 1, 1.15, 1.3, 1.5, 1.8, 2.2];
+let fontSizeIndex = 1; // default 1rem
+
+fontDecrease.addEventListener("click", () => {
+  if (fontSizeIndex > 0) {
+    fontSizeIndex--;
+    chatMessages.style.fontSize = FONT_SIZES[fontSizeIndex] + "rem";
+  }
+});
+
+fontIncrease.addEventListener("click", () => {
+  if (fontSizeIndex < FONT_SIZES.length - 1) {
+    fontSizeIndex++;
+    chatMessages.style.fontSize = FONT_SIZES[fontSizeIndex] + "rem";
+  }
+});
 
 // ===== Screen Navigation =====
 
@@ -34,9 +58,10 @@ function showScreen(screen) {
 
 // ===== Password Screen =====
 
-function handlePassword() {
+async function handlePassword() {
   const value = passwordInput.value;
-  if (validatePassword(value)) {
+  passwordBtn.disabled = true;
+  if (await validatePassword(value)) {
     passwordError.textContent = "";
     showScreen(setupScreen);
     nameInput.focus();
@@ -45,6 +70,7 @@ function handlePassword() {
     passwordInput.value = "";
     passwordInput.focus();
   }
+  passwordBtn.disabled = false;
 }
 
 passwordBtn.addEventListener("click", handlePassword);
@@ -72,7 +98,7 @@ function renderColorPicker() {
 }
 
 function handleSetup() {
-  const user = createUser(nameInput.value, selectedColor);
+  const user = createUser(nameInput.value, selectedColor, readonlyToggle.checked);
   if (!user) {
     setupError.textContent = "Ingresa tu nombre y elige un color";
     return;
@@ -108,11 +134,38 @@ function enterChat() {
 
   // Register presence
   registerPresence(currentUser, (users) => {
-    usersCount.textContent = `${users.length} connected`;
+    usersCount.textContent = users.length;
+    usersList.innerHTML = "";
+    users.forEach((u) => {
+      const item = document.createElement("div");
+      item.className = "users-list-item";
+      const dot = document.createElement("span");
+      dot.className = "user-dot";
+      dot.style.backgroundColor = u.color;
+      const name = document.createElement("span");
+      name.textContent = u.name;
+      item.appendChild(dot);
+      item.appendChild(name);
+      usersList.appendChild(item);
+    });
   });
 
-  // Check speech support
-  if (!isSupported()) {
+  // Toggle users list dropdown
+  usersBtn.addEventListener("click", () => {
+    usersList.classList.toggle("hidden");
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!usersBtn.contains(e.target) && !usersList.contains(e.target)) {
+      usersList.classList.add("hidden");
+    }
+  });
+
+  // Hide mic for read-only users
+  if (currentUser.readOnly) {
+    chatFooter.classList.add("hidden");
+  } else if (!isSupported()) {
     micStatus.textContent = "Browser not supported";
     micBtn.disabled = true;
   }

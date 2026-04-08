@@ -2,32 +2,37 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { validatePassword, createUser, saveUser, loadUser, getColorPalette } from "../js/auth.js";
 
 describe("validatePassword", () => {
-  it("accepts the correct password", () => {
-    expect(validatePassword("oido2026")).toBe(true);
+  it("accepts the correct password", async () => {
+    expect(await validatePassword("oido2026")).toBe(true);
   });
 
-  it("rejects wrong password", () => {
-    expect(validatePassword("wrong")).toBe(false);
+  it("rejects wrong password", async () => {
+    expect(await validatePassword("wrong")).toBe(false);
   });
 
-  it("rejects empty string", () => {
-    expect(validatePassword("")).toBe(false);
+  it("rejects empty string", async () => {
+    expect(await validatePassword("")).toBe(false);
   });
 
-  it("rejects null/undefined", () => {
-    expect(validatePassword(null)).toBe(false);
-    expect(validatePassword(undefined)).toBe(false);
+  it("rejects null/undefined", async () => {
+    expect(await validatePassword(null)).toBe(false);
+    expect(await validatePassword(undefined)).toBe(false);
   });
 
-  it("trims whitespace before comparing", () => {
-    expect(validatePassword("  oido2026  ")).toBe(true);
+  it("trims whitespace before comparing", async () => {
+    expect(await validatePassword("  oido2026  ")).toBe(true);
   });
 });
 
 describe("createUser", () => {
   it("creates a user with name and color", () => {
     const user = createUser("David", "#ef4444");
-    expect(user).toEqual({ name: "David", color: "#ef4444" });
+    expect(user).toEqual({ name: "David", color: "#ef4444", readOnly: false });
+  });
+
+  it("creates a read-only user", () => {
+    const user = createUser("David", "#ef4444", true);
+    expect(user.readOnly).toBe(true);
   });
 
   it("trims the name", () => {

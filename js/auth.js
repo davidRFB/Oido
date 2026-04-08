@@ -1,14 +1,29 @@
-import { ROOM_PASSWORD, COLOR_PALETTE } from "./config.js";
+import { ROOM_PASSWORD_HASH, COLOR_PALETTE } from "./config.js";
 
 const SESSION_KEY = "oido_user";
 
 /**
- * Validate password against the hardcoded room password.
- * @param {string} input
- * @returns {boolean}
+ * Hash a string using SHA-256 via Web Crypto API.
+ * @param {string} text
+ * @returns {Promise<string>} hex-encoded hash
  */
-export function validatePassword(input) {
-  return typeof input === "string" && input.trim() === ROOM_PASSWORD;
+async function sha256(text) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Validate password against the stored hash.
+ * @param {string} input
+ * @returns {Promise<boolean>}
+ */
+export async function validatePassword(input) {
+  if (typeof input !== "string" || !input.trim()) return false;
+  const hash = await sha256(input.trim());
+  return hash === ROOM_PASSWORD_HASH;
 }
 
 /**
@@ -17,11 +32,11 @@ export function validatePassword(input) {
  * @param {string} color - hex color value
  * @returns {{ name: string, color: string } | null}
  */
-export function createUser(name, color) {
+export function createUser(name, color, readOnly = false) {
   const trimmed = (name || "").trim();
   if (!trimmed) return null;
   if (!color) return null;
-  return { name: trimmed, color };
+  return { name: trimmed, color, readOnly };
 }
 
 /**

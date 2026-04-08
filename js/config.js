@@ -1,5 +1,5 @@
-// Room password (hardcoded for family use)
-export const ROOM_PASSWORD = "oido2026";
+// Room password stored as SHA-256 hash (not plaintext)
+export const ROOM_PASSWORD_HASH = "847fe1747b326c60628b88e280ef4daa791b448c86e222ac08d1983e36486720";
 
 // Color palette for users to choose from
 export const COLOR_PALETTE = [

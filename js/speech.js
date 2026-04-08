@@ -67,6 +67,14 @@ export async function startListening({ onInterim, onFinal, onError, onStateChang
     if (event.error === "no-speech" || event.error === "aborted") {
       return;
     }
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      isListening = false;
+      onError?.({
+        error: event.error,
+        message: "Microphone permission denied. Check browser settings and ensure you're using Chrome/Edge.",
+      });
+      return;
+    }
     onError?.(event);
   };
 
