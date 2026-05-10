@@ -26,7 +26,10 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           DATE="$(date -u +%Y-%m-%d)"
-          sed -i "s|__VERSION__|${SHORT_SHA} · ${DATE}|g" index.html
+          # Only substitute the placeholder inside the version-tag div
+          # (>__VERSION__<). The bare string also appears in a JS fallback
+          # check; substituting it there flips the check and shows "dev".
+          sed -i "s|>__VERSION__<|>${SHORT_SHA} · ${DATE}<|g" index.html
 
       - uses: actions/configure-pages@v5
 
