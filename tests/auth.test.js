@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { validatePassword, createUser, saveUser, loadUser, getColorPalette } from "../js/auth.js";
+import {
+  validatePassword,
+  createUser,
+  saveUser,
+  loadUser,
+  getColorPalette,
+  getUserId,
+  getOrCreateUserId,
+} from "../js/auth.js";
 
 describe("validatePassword", () => {
   it("accepts the correct password", async () => {
@@ -53,7 +61,7 @@ describe("createUser", () => {
 
 describe("saveUser / loadUser", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
   });
 
   it("saves and loads a user", () => {
@@ -67,8 +75,46 @@ describe("saveUser / loadUser", () => {
   });
 
   it("returns null for corrupted data", () => {
-    sessionStorage.setItem("oido_user", "not-json");
+    localStorage.setItem("oido_user", "not-json");
     expect(loadUser()).toBeNull();
+  });
+
+  it("persists across simulated reloads (localStorage, not sessionStorage)", () => {
+    const user = { name: "David", color: "#ef4444", readOnly: false };
+    saveUser(user);
+    // Simulating a sessionStorage clear (tab close) must not affect us.
+    sessionStorage.clear();
+    expect(loadUser()).toEqual(user);
+  });
+});
+
+describe("getUserId / getOrCreateUserId", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("getUserId returns null on first visit", () => {
+    expect(getUserId()).toBeNull();
+  });
+
+  it("getOrCreateUserId mints a UUID on first call and persists it", () => {
+    const id = getOrCreateUserId();
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThan(20);
+    expect(localStorage.getItem("oido_user_id")).toBe(id);
+  });
+
+  it("getOrCreateUserId returns the same UUID on subsequent calls", () => {
+    const a = getOrCreateUserId();
+    const b = getOrCreateUserId();
+    const c = getUserId();
+    expect(b).toBe(a);
+    expect(c).toBe(a);
+  });
+
+  it("getUserId reads back what getOrCreateUserId wrote", () => {
+    const id = getOrCreateUserId();
+    expect(getUserId()).toBe(id);
   });
 });
 

@@ -1,6 +1,7 @@
 import { ROOM_PASSWORD_HASH, COLOR_PALETTE } from "./config.js";
 
-const SESSION_KEY = "oido_user";
+const LOCAL_KEY = "oido_user";
+const LOCAL_USER_ID_KEY = "oido_user_id";
 
 /**
  * Hash a string using SHA-256 via Web Crypto API.
@@ -30,7 +31,7 @@ export async function validatePassword(input) {
  * Create a user object from name and color.
  * @param {string} name
  * @param {string} color - hex color value
- * @returns {{ name: string, color: string } | null}
+ * @returns {{ name: string, color: string, readOnly: boolean } | null}
  */
 export function createUser(name, color, readOnly = false) {
   const trimmed = (name || "").trim();
@@ -40,19 +41,19 @@ export function createUser(name, color, readOnly = false) {
 }
 
 /**
- * Save user to sessionStorage.
- * @param {{ name: string, color: string }} user
+ * Save user to localStorage so name + color survive tab close on the same device.
+ * @param {{ name: string, color: string, readOnly?: boolean }} user
  */
 export function saveUser(user) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(user));
 }
 
 /**
- * Load user from sessionStorage.
- * @returns {{ name: string, color: string } | null}
+ * Load user from localStorage.
+ * @returns {{ name: string, color: string, readOnly?: boolean } | null}
  */
 export function loadUser() {
-  const data = sessionStorage.getItem(SESSION_KEY);
+  const data = localStorage.getItem(LOCAL_KEY);
   if (!data) return null;
   try {
     const user = JSON.parse(data);
@@ -61,6 +62,26 @@ export function loadUser() {
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the persisted user id without creating one. Returns null on first visit.
+ * @returns {string | null}
+ */
+export function getUserId() {
+  return localStorage.getItem(LOCAL_USER_ID_KEY);
+}
+
+/**
+ * Read the persisted user id, generating and storing a fresh UUID on first call.
+ * @returns {string}
+ */
+export function getOrCreateUserId() {
+  const existing = getUserId();
+  if (existing) return existing;
+  const fresh = crypto.randomUUID();
+  localStorage.setItem(LOCAL_USER_ID_KEY, fresh);
+  return fresh;
 }
 
 /**
