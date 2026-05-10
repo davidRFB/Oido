@@ -447,6 +447,20 @@ input:focus {
   background: #22c55e;
 }
 
+/* ===== Version Tag ===== */
+.version-tag {
+  position: fixed;
+  bottom: 4px;
+  right: 8px;
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  pointer-events: none;
+  user-select: none;
+  z-index: 100;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
   #password-screen h1 {

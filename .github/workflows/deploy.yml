@@ -22,6 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Inject version into index.html
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          DATE="$(date -u +%Y-%m-%d)"
+          sed -i "s|__VERSION__|${SHORT_SHA} · ${DATE}|g" index.html
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v4

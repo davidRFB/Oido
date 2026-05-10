@@ -92,5 +92,14 @@
     </div>
   </div>
 
+  <!-- Replaced by .github/workflows/deploy.yml at deploy time. Stays "dev" locally. -->
+  <div class="version-tag" id="version-tag">__VERSION__</div>
+  <script>
+    (function () {
+      var v = document.getElementById("version-tag");
+      if (v && v.textContent === "__VERSION__") v.textContent = "dev";
+    })();
+  </script>
+
 </body>
 </html>
