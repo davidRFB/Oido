@@ -736,15 +736,15 @@ input:focus {
   flex-shrink: 0;
 }
 
-/* ===== Modal (Diagnóstico) ===== */
+/* ===== Modal (Diagnóstico) — bottom sheet ===== */
 .modal {
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: 1rem;
+  padding: 0;
 }
 
 .modal.hidden {
@@ -754,41 +754,53 @@ input:focus {
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .modal-panel {
   position: relative;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
   width: 100%;
-  max-width: 560px;
-  max-height: 90dvh;
+  max-width: 520px;
+  max-height: 60dvh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
-  animation: modalIn 0.18s ease-out;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  animation: sheetUp 0.2s ease-out;
 }
 
-@keyframes modalIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+.modal-panel::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-color);
+}
+
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.85rem 1rem;
+  padding: 0.75rem 0.9rem 0.55rem;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  margin-top: 6px;
 }
 
 .modal-header h2 {
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.005em;
 }
@@ -796,39 +808,39 @@ input:focus {
 .modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 0.7rem 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
+  gap: 0.7rem;
 }
 
 .modal-footer {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
-  padding: 0.75rem 1rem;
+  padding: 0.55rem 0.9rem 0.7rem;
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .modal-footer .btn {
-  padding: 0.55rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
 }
 
 .diag-section h3 {
-  font-size: 0.78rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--text-secondary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
   font-weight: 700;
 }
 
 .diag-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
 }
 
 .diag-table tr + tr td {
@@ -836,8 +848,9 @@ input:focus {
 }
 
 .diag-table td {
-  padding: 0.45rem 0.25rem;
+  padding: 0.3rem 0.2rem;
   vertical-align: top;
+  line-height: 1.3;
 }
 
 .diag-table td:first-child {
@@ -859,13 +872,13 @@ input:focus {
 .diag-logs {
   background: #0a0a0a;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0.65rem;
-  max-height: 220px;
+  border-radius: 6px;
+  padding: 0.5rem;
+  max-height: 130px;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: 0.7rem;
+  line-height: 1.4;
   color: #cfcfcf;
   white-space: pre-wrap;
   word-break: break-word;
