@@ -23,7 +23,7 @@ import {
   onMessagesCleared,
   saveUserProfile,
 } from "./chat.js";
-import { isSupported, toggleListening, stopListening, getIsListening } from "./speech.js";
+import { isSupported, getUnsupportedReason, toggleListening, stopListening, getIsListening } from "./speech.js";
 import {
   startAudioLevelMonitor,
   stopAudioLevelMonitor,
@@ -343,6 +343,18 @@ document.addEventListener("keydown", (e) => {
 function refreshSupportBanner() {
   if (!supportBanner) return;
   const caps = getCapabilities();
+  const reason = getUnsupportedReason();
+
+  // iPhone Chrome/Firefox/Edge expose the speech constructor but Apple blocks
+  // the service from non-Safari iOS browsers. Show a tailored message instead
+  // of the generic "no soporta reconocimiento de voz".
+  if (reason === "ios-non-safari") {
+    supportBannerText.textContent =
+      "En iPhone solo Safari reconoce la voz. Abre esta página en Safari para hablar.";
+    supportBanner.classList.remove("hidden");
+    return;
+  }
+
   const issues = [];
   if (!caps.speechApi) issues.push("reconocimiento de voz");
   if (!caps.mediaDevices) issues.push("micrófono");
@@ -819,7 +831,9 @@ function enterChat() {
   if (currentUser.readOnly) {
     chatFooter.classList.add("hidden");
   } else if (!isSupported()) {
-    micStatus.textContent = "Navegador no compatible";
+    micStatus.textContent = getUnsupportedReason() === "ios-non-safari"
+      ? "Abre esta página en Safari"
+      : "Navegador no compatible";
     micBtn.disabled = true;
   } else {
     // Auto-start listening

@@ -10,6 +10,11 @@ let recognition = null;
 let isListening = false;
 let restartTimer = null;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+// iOS only exposes webkitSpeechRecognition to Safari. Chrome/Firefox/Edge on
+// iPhone wrap WebKit but Apple withholds the speech service from them, so the
+// constructor exists yet start() fires "service-not-allowed" instantly.
+const isIOSNonSafari = /iPhone|iPad|iPod/.test(navigator.userAgent) &&
+  /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|DuckDuckGo/.test(navigator.userAgent);
 const MOBILE_RESTART_DELAY = 500; // ms to wait before restarting on mobile
 
 /**
@@ -17,7 +22,21 @@ const MOBILE_RESTART_DELAY = 500; // ms to wait before restarting on mobile
  * @returns {boolean}
  */
 export function isSupported() {
+  if (isIOSNonSafari) return false;
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+/**
+ * Returns a stable reason code when speech recognition won't work on this
+ * browser, or null when it should. Lets the UI surface a tailored message
+ * (e.g. "open in Safari") instead of a generic "no compatible".
+ *   "ios-non-safari" — iPhone Chrome/Firefox/Edge: Safari-only on iOS
+ *   "no-api"         — no SpeechRecognition constructor at all
+ */
+export function getUnsupportedReason() {
+  if (isIOSNonSafari) return "ios-non-safari";
+  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) return "no-api";
+  return null;
 }
 
 /**
