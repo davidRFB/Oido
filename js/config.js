@@ -13,6 +13,20 @@ export const COLOR_PALETTE = [
   { name: "Celeste", value: "#06b6d4" },
 ];
 
+// Audio gate (Feature A). RMS amplitude in [0,1]. Drops final speech results
+// when local mic was quiet — i.e., the speech came from another phone's owner
+// across the room, not this phone's owner.
+export const AUDIO_GATE_THRESHOLD = 0.10;
+export const AUDIO_GATE_WINDOW_MS = 1000;
+export const AUDIO_RING_CAPACITY = 128;
+
+// Cross-device dedup (Feature B). When a peer's message looks near-identical to
+// one received in the last DEDUP_WINDOW_MS from a different user, don't render.
+export const DEDUP_WINDOW_MS = 2000;
+export const DEDUP_RING_SIZE = 10;
+export const DEDUP_LEN_RATIO_MAX = 0.30;
+export const DEDUP_LEV_RATIO_MAX = 0.25;
+
 // Firebase configuration - REPLACE with your own config
 // See CLAUDE.md for setup instructions
 export const firebaseConfig = {

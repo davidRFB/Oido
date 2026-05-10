@@ -1,6 +1,9 @@
 import { validatePassword, createUser, saveUser, loadUser, getColorPalette } from "./auth.js";
 import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage, clearMessages, onMessagesCleared } from "./chat.js";
 import { isSupported, toggleListening } from "./speech.js";
+import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
+import { shouldRenderIncoming } from "./dedup.js";
+import { AUDIO_GATE_THRESHOLD } from "./config.js";
 
 // DOM elements
 const passwordScreen = document.getElementById("password-screen");
@@ -134,9 +137,28 @@ renderColorPicker();
 
 // ===== Chat Screen =====
 
+function startMicLevelBarLoop() {
+  const fill = document.getElementById("mic-level-bar-fill");
+  if (!fill) return;
+  const tick = () => {
+    const lvl = getCurrentLevel();
+    // Map 0..0.5 RMS to 0..100% so normal speech fills most of the bar.
+    fill.style.width = Math.min(100, Math.round(lvl * 200)) + "%";
+    fill.classList.toggle("above-threshold", lvl >= AUDIO_GATE_THRESHOLD);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 function enterChat() {
   showScreen(chatScreen);
   initFirebase();
+
+  // Persistent mic for the audio gate. Soft-fails on iOS and on denial —
+  // shouldSend() returns true when the monitor isn't running, so the app
+  // keeps working with the gate effectively bypassed.
+  startAudioLevelMonitor().catch(() => { /* gate stays open */ });
+  startMicLevelBarLoop();
 
   // Listen for messages
   onMessage((message) => {
@@ -144,6 +166,12 @@ function enterChat() {
     if (message.isFinal && interimElement && message.name === currentUser.name) {
       interimElement.remove();
       interimElement = null;
+    }
+    // Cross-device dedup: same utterance picked up by multiple phones in
+    // the room. shouldRenderIncoming records into the ring even when it
+    // returns false, so a third device's copy is suppressed too.
+    if (message.isFinal && !shouldRenderIncoming(message, currentUser.name)) {
+      return;
     }
     renderMessage(chatMessages, message);
   });
@@ -220,6 +248,9 @@ micBtn.addEventListener("click", async () => {
         interimElement.remove();
         interimElement = null;
       }
+      // Drop transcripts captured while local mic was quiet — almost
+      // certainly someone else's voice picked up across the room.
+      if (!shouldSend()) return;
       sendMessage(currentUser, text, true);
     },
 

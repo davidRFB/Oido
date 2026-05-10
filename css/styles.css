@@ -427,6 +427,26 @@ input:focus {
   color: var(--text-secondary);
 }
 
+/* ===== Mic Level Bar ===== */
+.mic-level-bar {
+  width: 60px;
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mic-level-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--danger);
+  transition: width 60ms linear, background-color 120ms ease;
+}
+
+.mic-level-bar-fill.above-threshold {
+  background: #22c55e;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
   #password-screen h1 {
