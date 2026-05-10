@@ -1,6 +1,9 @@
-import { ROOM_PASSWORD_HASH, COLOR_PALETTE } from "./config.js";
+import { ROOM_PASSWORD_HASH, COLOR_PALETTE, ENROLLMENT_MIN_SAMPLES, AUTH_FRESH_MS } from "./config.js";
 
-const SESSION_KEY = "oido_user";
+const LOCAL_KEY = "oido_user";
+const LOCAL_USER_ID_KEY = "oido_user_id";
+const LOCAL_VOICEPRINT_KEY = "oido_voiceprint";
+const LOCAL_AUTH_AT_KEY = "oido_auth_at";
 
 /**
  * Hash a string using SHA-256 via Web Crypto API.
@@ -30,7 +33,7 @@ export async function validatePassword(input) {
  * Create a user object from name and color.
  * @param {string} name
  * @param {string} color - hex color value
- * @returns {{ name: string, color: string } | null}
+ * @returns {{ name: string, color: string, readOnly: boolean } | null}
  */
 export function createUser(name, color, readOnly = false) {
   const trimmed = (name || "").trim();
@@ -40,19 +43,19 @@ export function createUser(name, color, readOnly = false) {
 }
 
 /**
- * Save user to sessionStorage.
- * @param {{ name: string, color: string }} user
+ * Save user to localStorage so name + color survive tab close on the same device.
+ * @param {{ name: string, color: string, readOnly?: boolean }} user
  */
 export function saveUser(user) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(user));
 }
 
 /**
- * Load user from sessionStorage.
- * @returns {{ name: string, color: string } | null}
+ * Load user from localStorage.
+ * @returns {{ name: string, color: string, readOnly?: boolean } | null}
  */
 export function loadUser() {
-  const data = sessionStorage.getItem(SESSION_KEY);
+  const data = localStorage.getItem(LOCAL_KEY);
   if (!data) return null;
   try {
     const user = JSON.parse(data);
@@ -61,6 +64,109 @@ export function loadUser() {
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the persisted user id without creating one. Returns null on first visit.
+ * @returns {string | null}
+ */
+export function getUserId() {
+  return localStorage.getItem(LOCAL_USER_ID_KEY);
+}
+
+/**
+ * Read the persisted user id, generating and storing a fresh UUID on first call.
+ * @returns {string}
+ */
+export function getOrCreateUserId() {
+  const existing = getUserId();
+  if (existing) return existing;
+  const fresh = crypto.randomUUID();
+  localStorage.setItem(LOCAL_USER_ID_KEY, fresh);
+  return fresh;
+}
+
+/**
+ * Persist this device's voiceprint (mean F0 + sample stddev + count) so the
+ * pitch gate can suppress crosstalk without re-running enrollment every visit.
+ * @param {{ f0_mean: number, f0_stddev: number, f0_samples: number, enrolled_at?: number }} profile
+ */
+export function saveVoiceprint(profile) {
+  if (!profile) return;
+  if (typeof profile.f0_mean !== "number" || typeof profile.f0_stddev !== "number") return;
+  if (typeof profile.f0_samples !== "number") return;
+  localStorage.setItem(LOCAL_VOICEPRINT_KEY, JSON.stringify(profile));
+}
+
+/**
+ * Read the stored voiceprint. Returns null when missing or shape-invalid so
+ * callers can default-allow.
+ * @returns {{ f0_mean: number, f0_stddev: number, f0_samples: number, enrolled_at?: number } | null}
+ */
+export function loadVoiceprint() {
+  const data = localStorage.getItem(LOCAL_VOICEPRINT_KEY);
+  if (!data) return null;
+  try {
+    const v = JSON.parse(data);
+    if (
+      v &&
+      typeof v.f0_mean === "number" &&
+      typeof v.f0_stddev === "number" &&
+      typeof v.f0_samples === "number"
+    ) {
+      return v;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether this device should run enrollment before entering chat. True if no
+ * voiceprint is stored or the stored sample count is below the enrollment
+ * threshold (which would have produced an unreliable band).
+ * @returns {boolean}
+ */
+export function needsEnrollment() {
+  const v = loadVoiceprint();
+  if (!v) return true;
+  return v.f0_samples < ENROLLMENT_MIN_SAMPLES;
+}
+
+/**
+ * Stamp the moment of a successful password validation. Used by isAuthFresh
+ * to short-circuit the password screen on reloads within the freshness window.
+ * @param {number} [now] - injection seam for tests
+ */
+export function markAuthFresh(now) {
+  const t = typeof now === "number" ? now : Date.now();
+  localStorage.setItem(LOCAL_AUTH_AT_KEY, String(t));
+}
+
+/**
+ * Whether a recent password validation is still valid. Returns false on
+ * missing/corrupt timestamps, future timestamps (clock skew), and anything
+ * older than AUTH_FRESH_MS.
+ * @param {number} [now] - injection seam for tests
+ * @returns {boolean}
+ */
+export function isAuthFresh(now) {
+  const raw = localStorage.getItem(LOCAL_AUTH_AT_KEY);
+  if (!raw) return false;
+  const stamp = Number(raw);
+  if (!Number.isFinite(stamp) || stamp <= 0) return false;
+  const t = typeof now === "number" ? now : Date.now();
+  if (stamp > t) return false; // future stamp — treat as invalid
+  return t - stamp < AUTH_FRESH_MS;
+}
+
+/**
+ * Forget the auth stamp. Currently unused by the app but exposed for tests
+ * and a possible future "log out" action.
+ */
+export function clearAuthFresh() {
+  localStorage.removeItem(LOCAL_AUTH_AT_KEY);
 }
 
 /**

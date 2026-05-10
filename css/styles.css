@@ -155,6 +155,32 @@ input:focus {
   cursor: not-allowed;
 }
 
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.btn.hidden {
+  display: none;
+}
+
+.toggle-label.hidden {
+  display: none;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.875rem;
@@ -211,6 +237,90 @@ input:focus {
   transform: scale(1.15);
 }
 
+/* ===== Enrollment Screen ===== */
+#enrollment-screen {
+  gap: 1rem;
+  text-align: center;
+}
+
+#enrollment-screen h2 {
+  font-size: 1.5rem;
+}
+
+.enrollment-instruction {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.enrollment-phrase {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--bg-card);
+  padding: 1.5rem 1.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  font-family: "Iowan Old Style", "Hoefler Text", Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 1.1rem;
+  line-height: 1.75;
+  letter-spacing: 0.005em;
+  white-space: pre-line;
+  max-width: 520px;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.enrollment-phrase::before,
+.enrollment-phrase::after {
+  position: absolute;
+  font-family: "Iowan Old Style", Georgia, serif;
+  font-size: 2.75rem;
+  font-style: normal;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.enrollment-phrase::before {
+  content: "“";
+  top: 0.2rem;
+  left: 0.55rem;
+}
+
+.enrollment-phrase::after {
+  content: "”";
+  bottom: -0.4rem;
+  right: 0.6rem;
+}
+
+.enrollment-bar {
+  width: 240px;
+  height: 8px;
+  margin-top: 0.25rem;
+}
+
+.enrollment-status {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  min-height: 1.25rem;
+}
+
+.enrollment-pitch {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  min-height: 1.25rem;
+}
+
+.enrollment-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* ===== Chat Header ===== */
 .chat-header {
   display: flex;
@@ -225,6 +335,40 @@ input:focus {
 .chat-header h2 {
   font-size: 1.125rem;
   font-weight: 600;
+}
+
+/* ===== User Pill (chat header) ===== */
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  max-width: 60vw;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.user-pill-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.user-pill-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-controls {
@@ -254,26 +398,102 @@ input:focus {
   background: var(--border-color);
 }
 
-.clear-btn {
-  padding: 0.25rem 0.5rem;
+/* ===== Icon Buttons (gear, etc.) ===== */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   background: var(--bg-card);
-  color: var(--danger);
+  color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.clear-btn:hover {
-  background: var(--danger);
+.icon-btn:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+  transform: rotate(15deg);
+}
+
+.icon-btn[aria-expanded="true"] {
+  background: var(--border-color);
   color: var(--text-primary);
 }
 
-.clear-btn:disabled {
+/* ===== Settings Dropdown ===== */
+.settings-dropdown {
+  position: relative;
+}
+
+.settings-list {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.35rem;
+  min-width: 200px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  animation: dropIn 0.14s ease-out;
+}
+
+.settings-list.hidden {
+  display: none;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: transparent;
+  color: var(--text-primary);
+  border: none;
+  border-radius: 7px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.settings-item-danger {
+  color: var(--danger);
+}
+
+.settings-item-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+}
+
+.settings-separator {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0.25rem 0.4rem;
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .users-dropdown {

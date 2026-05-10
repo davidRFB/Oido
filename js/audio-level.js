@@ -24,6 +24,7 @@ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 
 let audioCtx = null;
 let mediaStream = null;
+let mediaStreamSource = null;
 let analyser = null;
 let dataArray = null;
 let rafId = null;
@@ -99,11 +100,11 @@ export async function startAudioLevelMonitor() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioCtx = new AC();
-    const source = audioCtx.createMediaStreamSource(mediaStream);
+    mediaStreamSource = audioCtx.createMediaStreamSource(mediaStream);
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
     dataArray = new Float32Array(analyser.fftSize);
-    source.connect(analyser);
+    mediaStreamSource.connect(analyser);
     monitorState = "running";
     rafId = requestAnimationFrame(tick);
     return true;
@@ -119,6 +120,7 @@ export async function startAudioLevelMonitor() {
       try { audioCtx.close(); } catch (_e2) { /* ignore */ }
       audioCtx = null;
     }
+    mediaStreamSource = null;
     if (isIOS) console.warn("Audio gate disabled on iOS (mic conflict). Speech still works.");
     return false;
   }
@@ -140,12 +142,30 @@ export function stopAudioLevelMonitor() {
     try { audioCtx.close(); } catch (_e) { /* ignore */ }
     audioCtx = null;
   }
+  mediaStreamSource = null;
   analyser = null;
   dataArray = null;
   ring = [];
   ringIdx = 0;
   currentLevel = 0;
   monitorState = "idle";
+}
+
+/**
+ * Returns the running AudioContext so other modules (pitch detector, future
+ * analysers) can attach without opening a second getUserMedia. Null when the
+ * monitor isn't running, in which case callers must soft-fail.
+ */
+export function getSharedAudioContext() {
+  return monitorState === "running" ? audioCtx : null;
+}
+
+/**
+ * Returns the cached MediaStreamSource node so peer analysers can fan out
+ * from the same mic stream. Null when the monitor isn't running.
+ */
+export function getSharedMediaStreamSource() {
+  return monitorState === "running" ? mediaStreamSource : null;
 }
 
 /**

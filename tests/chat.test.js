@@ -17,6 +17,17 @@ describe("formatMessage", () => {
     const msg = formatMessage(user, "Hola...", false);
     expect(msg.isFinal).toBe(false);
   });
+
+  it("includes userId when the user object carries one", () => {
+    const withId = { ...user, userId: "abc-123" };
+    const msg = formatMessage(withId, "Hola", true);
+    expect(msg.userId).toBe("abc-123");
+  });
+
+  it("omits userId when absent so old peers stay backwards-compatible", () => {
+    const msg = formatMessage(user, "Hola", true);
+    expect("userId" in msg).toBe(false);
+  });
 });
 
 describe("renderMessage", () => {
