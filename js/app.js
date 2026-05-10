@@ -1,5 +1,5 @@
 import { validatePassword, createUser, saveUser, loadUser, getColorPalette } from "./auth.js";
-import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage } from "./chat.js";
+import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage, clearMessages, onMessagesCleared } from "./chat.js";
 import { isSupported, toggleListening } from "./speech.js";
 
 // DOM elements
@@ -26,6 +26,7 @@ const usersCount = document.getElementById("users-count");
 const usersList = document.getElementById("users-list");
 const fontDecrease = document.getElementById("font-decrease");
 const fontIncrease = document.getElementById("font-increase");
+const clearBtn = document.getElementById("clear-btn");
 
 let currentUser = null;
 let selectedColor = null;
@@ -46,6 +47,21 @@ fontIncrease.addEventListener("click", () => {
   if (fontSizeIndex < FONT_SIZES.length - 1) {
     fontSizeIndex++;
     chatMessages.style.fontSize = FONT_SIZES[fontSizeIndex] + "rem";
+  }
+});
+
+clearBtn.addEventListener("click", async () => {
+  if (!confirm("Limpiar todos los mensajes para todos?")) return;
+  clearBtn.disabled = true;
+  try {
+    await clearMessages();
+    chatMessages.innerHTML = "";
+    interimElement = null;
+  } catch (err) {
+    console.error("Clear failed:", err);
+    alert("No se pudo limpiar el chat");
+  } finally {
+    clearBtn.disabled = false;
   }
 });
 
@@ -130,6 +146,12 @@ function enterChat() {
       interimElement = null;
     }
     renderMessage(chatMessages, message);
+  });
+
+  // Clear DOM when any user clears the chat
+  onMessagesCleared(() => {
+    chatMessages.innerHTML = "";
+    interimElement = null;
   });
 
   // Register presence

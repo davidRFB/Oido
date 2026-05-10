@@ -3,7 +3,7 @@ import { validatePassword, createUser, saveUser, loadUser, getColorPalette } fro
 
 describe("validatePassword", () => {
   it("accepts the correct password", async () => {
-    expect(await validatePassword("oido2026")).toBe(true);
+    expect(await validatePassword("jaimeynubia")).toBe(true);
   });
 
   it("rejects wrong password", async () => {
@@ -20,7 +20,7 @@ describe("validatePassword", () => {
   });
 
   it("trims whitespace before comparing", async () => {
-    expect(await validatePassword("  oido2026  ")).toBe(true);
+    expect(await validatePassword("  jaimeynubia  ")).toBe(true);
   });
 });
 

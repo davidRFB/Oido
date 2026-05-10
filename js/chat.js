@@ -4,6 +4,7 @@ let db = null;
 let messagesRef = null;
 let presenceRef = null;
 let userPresenceRef = null;
+let clearedAtRef = null;
 
 /**
  * Initialize Firebase and connect to the room.
@@ -21,6 +22,7 @@ export function initFirebase() {
   db = firebase.database(app);
   messagesRef = firebase.ref(db, "rooms/default/messages");
   presenceRef = firebase.ref(db, "rooms/default/presence");
+  clearedAtRef = firebase.ref(db, "rooms/default/clearedAt");
 }
 
 /**
@@ -57,6 +59,35 @@ export function formatMessage(user, text, isFinal) {
     isFinal: isFinal,
     timestamp: Date.now(),
   };
+}
+
+/**
+ * Delete every message in the room and bump the cleared-at timestamp so
+ * other connected clients clear their local DOM via onMessagesCleared.
+ * @returns {Promise<void>}
+ */
+export async function clearMessages() {
+  if (!messagesRef) return;
+  await firebase.set(messagesRef, null);
+  await firebase.set(clearedAtRef, Date.now());
+}
+
+/**
+ * Subscribe to "chat was cleared" events. The callback fires whenever the
+ * room's clearedAt timestamp changes after the initial connection — i.e.
+ * skips the first snapshot, which represents existing state at join time.
+ * @param {function} callback
+ */
+export function onMessagesCleared(callback) {
+  if (!clearedAtRef) return;
+  let initialized = false;
+  firebase.onValue(clearedAtRef, () => {
+    if (!initialized) {
+      initialized = true;
+      return;
+    }
+    callback();
+  });
 }
 
 /**

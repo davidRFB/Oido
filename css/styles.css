@@ -254,6 +254,28 @@ input:focus {
   background: var(--border-color);
 }
 
+.clear-btn {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-card);
+  color: var(--danger);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.clear-btn:hover {
+  background: var(--danger);
+  color: var(--text-primary);
+}
+
+.clear-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .users-dropdown {
   position: relative;
 }
