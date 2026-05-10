@@ -1,0 +1,40 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "default": {
+        "messages": {
+          ".read": true,
+          ".write": "!newData.exists()",
+          "$msgId": {
+            ".write": "!data.exists() && newData.exists()",
+            ".validate": "newData.hasChildren(['name', 'color', 'text', 'isFinal', 'timestamp'])",
+            "name":      { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50" },
+            "color":     { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-fA-F]{6}$/)" },
+            "text":      { ".validate": "newData.isString() && newData.val().length <= 1000" },
+            "isFinal":   { ".validate": "newData.isBoolean()" },
+            "timestamp": { ".validate": "newData.isNumber() && newData.val() <= now + 60000" },
+            "$other":    { ".validate": false }
+          }
+        },
+        "clearedAt": {
+          ".read": true,
+          ".write": true,
+          ".validate": "newData.isNumber()"
+        },
+        "presence": {
+          ".read": true,
+          "$pId": {
+            ".write": true,
+            ".validate": "newData.hasChildren(['name', 'color', 'joinedAt'])",
+            "name":     { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50" },
+            "color":    { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-fA-F]{6}$/)" },
+            "joinedAt": { ".validate": "newData.isNumber()" },
+            "$other":   { ".validate": false }
+          }
+        }
+      }
+    }
+  }
+}
