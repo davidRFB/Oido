@@ -54,6 +54,40 @@
             },
             "$other":    { ".validate": false }
           }
+        },
+        "devices": {
+          ".read": true,
+          "$userId": {
+            ".write": true,
+            "name":              { ".validate": "newData.isString() && newData.val().length <= 50" },
+            "color":             { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "ua":                { ".validate": "newData.isString() && newData.val().length <= 500" },
+            "platform":          { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "caps": {
+              "speechApi":    { ".validate": "newData.isBoolean()" },
+              "mediaDevices": { ".validate": "newData.isBoolean()" },
+              "audioContext": { ".validate": "newData.isBoolean()" },
+              "online":       { ".validate": "newData.isBoolean()" },
+              "$other":       { ".validate": false }
+            },
+            "micPermission":     { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "unsupportedReason": { ".validate": "newData.isString() && newData.val().length <= 30" },
+            "readOnly":          { ".validate": "newData.isBoolean()" },
+            "gateDegraded":      { ".validate": "newData.isBoolean()" },
+            "monitorPeak":       { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1" },
+            "firstSeenAt":       { ".validate": "newData.isNumber()" },
+            "lastSeenAt":        { ".validate": "newData.isNumber() && newData.val() <= now + 60000" },
+            "recentErrors": {
+              "$errorId": {
+                ".validate": "newData.hasChildren(['code', 'at'])",
+                "code":    { ".validate": "newData.isString() && newData.val().length <= 50" },
+                "message": { ".validate": "newData.isString() && newData.val().length <= 500" },
+                "at":      { ".validate": "newData.isNumber()" },
+                "$other":  { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          }
         }
       }
     }

@@ -28,6 +28,15 @@ export function initFirebase() {
 }
 
 /**
+ * Returns the initialized Firebase Database handle, or null when running in
+ * offline mode (no firebaseConfig). Lets sibling modules build refs without
+ * re-initializing the SDK.
+ */
+export function getDb() {
+  return db;
+}
+
+/**
  * Send a message to the room.
  * @param {{ name: string, color: string }} user
  * @param {string} text

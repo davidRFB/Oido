@@ -19,7 +19,7 @@ export default [
     },
   },
   {
-    files: ["js/chat.js"],
+    files: ["js/chat.js", "js/telemetry.js"],
     languageOptions: {
       globals: {
         firebase: "writable",

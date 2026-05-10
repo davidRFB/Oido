@@ -13,12 +13,13 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import {
-      getDatabase, ref, push, set, onChildAdded, onValue, onDisconnect
+      getDatabase, ref, push, set, update, get, remove,
+      onChildAdded, onValue, onDisconnect,
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
     // Expose Firebase functions globally for our modules
     window.firebase = {
-      initializeApp, getDatabase, ref, push, set,
+      initializeApp, getDatabase, ref, push, set, update, get, remove,
       onChildAdded, onValue, onDisconnect,
       database: getDatabase,
     };

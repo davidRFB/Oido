@@ -40,6 +40,7 @@ import {
   inPitchBand,
 } from "./pitch.js";
 import { shouldRenderIncoming } from "./dedup.js";
+import { writeDeviceSnapshot, recordError } from "./telemetry.js";
 import {
   AUDIO_GATE_THRESHOLD,
   ENROLLMENT_DURATION_MS,
@@ -760,6 +761,13 @@ function enterChat() {
     console.warn("saveUserProfile failed:", err);
   });
 
+  // Passive device telemetry — capabilities, mic permission, gate state.
+  // Read in the Firebase console under rooms/default/devices/{userId} to
+  // diagnose remote devices without asking users to copy logs.
+  writeDeviceSnapshot(currentUser).catch((err) => {
+    console.warn("writeDeviceSnapshot failed:", err);
+  });
+
   // Release any mic stream left running by enrollment. On Android Chrome,
   // webkitSpeechRecognition.start() throws "service-not-allowed" while the
   // page is holding an open getUserMedia stream — so the monitor + pitch
@@ -899,6 +907,8 @@ micBtn.addEventListener("click", async () => {
       console.error("Speech error:", event);
       micStatus.textContent = "Error: " + (event.message || event.error);
       micBtn.classList.remove("listening");
+      recordError(currentUser, event.error, event.message || "").catch(() => {});
+      writeDeviceSnapshot(currentUser).catch(() => {});
     },
 
     onStateChange: (listening) => {
