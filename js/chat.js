@@ -136,6 +136,23 @@ export async function saveUserProfile(profile) {
 }
 
 /**
+ * Overwrite this device's presence record after a name/color change so other
+ * clients see the update in real time. No-op when offline or when presence
+ * hasn't been registered yet.
+ * @param {{ name: string, color: string, userId?: string }} user
+ */
+export function updatePresence(user) {
+  if (!userPresenceRef) return;
+  const record = {
+    name: user.name,
+    color: user.color,
+    joinedAt: Date.now(),
+  };
+  if (user.userId) record.userId = user.userId;
+  firebase.set(userPresenceRef, record);
+}
+
+/**
  * Register user presence in the room.
  * @param {{ name: string, color: string, userId?: string }} user
  * @param {function} onPresenceChange - called with array of connected users

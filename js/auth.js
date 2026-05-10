@@ -1,8 +1,9 @@
-import { ROOM_PASSWORD_HASH, COLOR_PALETTE, ENROLLMENT_MIN_SAMPLES } from "./config.js";
+import { ROOM_PASSWORD_HASH, COLOR_PALETTE, ENROLLMENT_MIN_SAMPLES, AUTH_FRESH_MS } from "./config.js";
 
 const LOCAL_KEY = "oido_user";
 const LOCAL_USER_ID_KEY = "oido_user_id";
 const LOCAL_VOICEPRINT_KEY = "oido_voiceprint";
+const LOCAL_AUTH_AT_KEY = "oido_auth_at";
 
 /**
  * Hash a string using SHA-256 via Web Crypto API.
@@ -131,6 +132,41 @@ export function needsEnrollment() {
   const v = loadVoiceprint();
   if (!v) return true;
   return v.f0_samples < ENROLLMENT_MIN_SAMPLES;
+}
+
+/**
+ * Stamp the moment of a successful password validation. Used by isAuthFresh
+ * to short-circuit the password screen on reloads within the freshness window.
+ * @param {number} [now] - injection seam for tests
+ */
+export function markAuthFresh(now) {
+  const t = typeof now === "number" ? now : Date.now();
+  localStorage.setItem(LOCAL_AUTH_AT_KEY, String(t));
+}
+
+/**
+ * Whether a recent password validation is still valid. Returns false on
+ * missing/corrupt timestamps, future timestamps (clock skew), and anything
+ * older than AUTH_FRESH_MS.
+ * @param {number} [now] - injection seam for tests
+ * @returns {boolean}
+ */
+export function isAuthFresh(now) {
+  const raw = localStorage.getItem(LOCAL_AUTH_AT_KEY);
+  if (!raw) return false;
+  const stamp = Number(raw);
+  if (!Number.isFinite(stamp) || stamp <= 0) return false;
+  const t = typeof now === "number" ? now : Date.now();
+  if (stamp > t) return false; // future stamp — treat as invalid
+  return t - stamp < AUTH_FRESH_MS;
+}
+
+/**
+ * Forget the auth stamp. Currently unused by the app but exposed for tests
+ * and a possible future "log out" action.
+ */
+export function clearAuthFresh() {
+  localStorage.removeItem(LOCAL_AUTH_AT_KEY);
 }
 
 /**

@@ -10,8 +10,11 @@ import {
   saveVoiceprint,
   loadVoiceprint,
   needsEnrollment,
+  markAuthFresh,
+  isAuthFresh,
+  clearAuthFresh,
 } from "../js/auth.js";
-import { ENROLLMENT_MIN_SAMPLES } from "../js/config.js";
+import { ENROLLMENT_MIN_SAMPLES, AUTH_FRESH_MS } from "../js/config.js";
 
 describe("validatePassword", () => {
   it("accepts the correct password", async () => {
@@ -171,6 +174,56 @@ describe("needsEnrollment", () => {
   it("returns false once a full-sample voiceprint is stored", () => {
     saveVoiceprint({ f0_mean: 180, f0_stddev: 22, f0_samples: ENROLLMENT_MIN_SAMPLES, enrolled_at: 1 });
     expect(needsEnrollment()).toBe(false);
+  });
+});
+
+describe("auth freshness", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("isAuthFresh returns false when no stamp is stored", () => {
+    expect(isAuthFresh()).toBe(false);
+  });
+
+  it("isAuthFresh returns true right after markAuthFresh", () => {
+    const now = 1_000_000;
+    markAuthFresh(now);
+    expect(isAuthFresh(now)).toBe(true);
+  });
+
+  it("isAuthFresh stays true within the freshness window", () => {
+    const now = 1_000_000;
+    markAuthFresh(now);
+    expect(isAuthFresh(now + AUTH_FRESH_MS - 1)).toBe(true);
+  });
+
+  it("isAuthFresh returns false at and after the freshness window", () => {
+    const now = 1_000_000;
+    markAuthFresh(now);
+    expect(isAuthFresh(now + AUTH_FRESH_MS)).toBe(false);
+    expect(isAuthFresh(now + AUTH_FRESH_MS + 1)).toBe(false);
+  });
+
+  it("isAuthFresh rejects future timestamps (clock skew)", () => {
+    markAuthFresh(2_000_000);
+    expect(isAuthFresh(1_000_000)).toBe(false);
+  });
+
+  it("isAuthFresh rejects corrupt stored values", () => {
+    localStorage.setItem("oido_auth_at", "not-a-number");
+    expect(isAuthFresh()).toBe(false);
+    localStorage.setItem("oido_auth_at", "0");
+    expect(isAuthFresh()).toBe(false);
+    localStorage.setItem("oido_auth_at", "-5");
+    expect(isAuthFresh()).toBe(false);
+  });
+
+  it("clearAuthFresh removes a previously-set stamp", () => {
+    markAuthFresh(1_000_000);
+    expect(isAuthFresh(1_000_000)).toBe(true);
+    clearAuthFresh();
+    expect(isAuthFresh(1_000_000)).toBe(false);
   });
 });
 

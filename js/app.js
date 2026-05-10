@@ -8,18 +8,22 @@ import {
   saveVoiceprint,
   loadVoiceprint,
   needsEnrollment,
+  markAuthFresh,
+  isAuthFresh,
+  clearAuthFresh,
 } from "./auth.js";
 import {
   initFirebase,
   sendMessage,
   onMessage,
   registerPresence,
+  updatePresence,
   renderMessage,
   clearMessages,
   onMessagesCleared,
   saveUserProfile,
 } from "./chat.js";
-import { isSupported, toggleListening } from "./speech.js";
+import { isSupported, toggleListening, stopListening, getIsListening } from "./speech.js";
 import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
 import {
   startPitchDetector,
@@ -32,6 +36,7 @@ import {
   AUDIO_GATE_THRESHOLD,
   ENROLLMENT_DURATION_MS,
   ENROLLMENT_MIN_SAMPLES,
+  ENROLLMENT_PHRASES,
   PITCH_WINDOW_MS,
   PITCH_TOLERANCE_STDDEV,
   PITCH_MIN_SAMPLES,
@@ -48,10 +53,13 @@ const passwordInput = document.getElementById("password-input");
 const passwordBtn = document.getElementById("password-btn");
 const passwordError = document.getElementById("password-error");
 
+const setupTitle = document.getElementById("setup-title");
 const nameInput = document.getElementById("name-input");
 const colorPicker = document.getElementById("color-picker");
 const readonlyToggle = document.getElementById("readonly-toggle");
+const readonlyToggleLabel = document.getElementById("readonly-toggle-label");
 const setupBtn = document.getElementById("setup-btn");
+const setupCancelBtn = document.getElementById("setup-cancel-btn");
 const setupError = document.getElementById("setup-error");
 
 const enrollmentRecordBtn = document.getElementById("enrollment-record-btn");
@@ -59,6 +67,7 @@ const enrollmentContinueBtn = document.getElementById("enrollment-continue-btn")
 const enrollmentStatus = document.getElementById("enrollment-status");
 const enrollmentPitch = document.getElementById("enrollment-pitch");
 const enrollmentError = document.getElementById("enrollment-error");
+const enrollmentPhraseEl = document.getElementById("enrollment-phrase");
 const enrollmentLevelBarFill = document.getElementById("enrollment-level-bar-fill");
 
 const chatMessages = document.getElementById("chat-messages");
@@ -70,12 +79,22 @@ const usersCount = document.getElementById("users-count");
 const usersList = document.getElementById("users-list");
 const fontDecrease = document.getElementById("font-decrease");
 const fontIncrease = document.getElementById("font-increase");
-const clearBtn = document.getElementById("clear-btn");
+const userPill = document.getElementById("user-pill");
+const userPillDot = document.getElementById("user-pill-dot");
+const userPillName = document.getElementById("user-pill-name");
+const settingsBtn = document.getElementById("settings-btn");
+const settingsList = document.getElementById("settings-list");
+const settingsEditProfile = document.getElementById("settings-edit-profile");
+const settingsRerecord = document.getElementById("settings-rerecord");
+const settingsLogout = document.getElementById("settings-logout");
+const settingsClear = document.getElementById("settings-clear");
 
 let currentUser = null;
 let selectedColor = null;
 let interimElement = null;
 let cachedVoiceprint = null;
+let isReEnrolling = false;
+let isEditingProfile = false;
 
 // ===== Font Size Control =====
 const FONT_SIZES = [0.9, 1, 1.15, 1.3, 1.5, 1.8, 2.2];
@@ -95,9 +114,10 @@ fontIncrease.addEventListener("click", () => {
   }
 });
 
-clearBtn.addEventListener("click", async () => {
+settingsClear.addEventListener("click", async () => {
+  closeSettings();
   if (!confirm("Limpiar todos los mensajes para todos?")) return;
-  clearBtn.disabled = true;
+  settingsClear.disabled = true;
   try {
     await clearMessages();
     chatMessages.innerHTML = "";
@@ -106,8 +126,56 @@ clearBtn.addEventListener("click", async () => {
     console.error("Clear failed:", err);
     alert("No se pudo limpiar el chat");
   } finally {
-    clearBtn.disabled = false;
+    settingsClear.disabled = false;
   }
+});
+
+// ===== Settings Dropdown =====
+
+function openSettings() {
+  settingsList.classList.remove("hidden");
+  settingsBtn.setAttribute("aria-expanded", "true");
+}
+
+function closeSettings() {
+  settingsList.classList.add("hidden");
+  settingsBtn.setAttribute("aria-expanded", "false");
+}
+
+settingsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (settingsList.classList.contains("hidden")) {
+    openSettings();
+  } else {
+    closeSettings();
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (!settingsBtn.contains(e.target) && !settingsList.contains(e.target)) {
+    closeSettings();
+  }
+});
+
+settingsRerecord.addEventListener("click", () => {
+  closeSettings();
+  startReEnrollment();
+});
+
+settingsEditProfile.addEventListener("click", () => {
+  closeSettings();
+  startProfileEdit();
+});
+
+settingsLogout.addEventListener("click", () => {
+  closeSettings();
+  if (!confirm("Cerrar sesión? Tendrás que ingresar la clave de nuevo.")) return;
+  // Drop the auth-fresh stamp so tryAutoEnter won't bypass the password
+  // screen on the next load. Hard-reload so Firebase listeners, mic state,
+  // and all module-level vars reset cleanly. Saved name/color/voiceprint
+  // stay in localStorage — re-entering the password lands you back in chat.
+  clearAuthFresh();
+  location.reload();
 });
 
 // ===== Screen Navigation =====
@@ -124,6 +192,7 @@ async function handlePassword() {
   passwordBtn.disabled = true;
   if (await validatePassword(value)) {
     passwordError.textContent = "";
+    markAuthFresh();
     // Returning user — name + color survived in localStorage. Skip setup, and
     // skip enrollment too if they're either read-only or already have a saved
     // voiceprint. This is the no-friction repeat-visit path.
@@ -144,6 +213,22 @@ async function handlePassword() {
   passwordBtn.disabled = false;
 }
 
+// On reload, if the password was validated within the last hour, jump
+// straight past the password gate. Same routing rules as handlePassword:
+// returning users with a voiceprint go to chat; first-time users to setup.
+function tryAutoEnter() {
+  if (!isAuthFresh()) return;
+  const savedUser = loadUser();
+  if (savedUser && (savedUser.readOnly || loadVoiceprint())) {
+    savedUser.userId = getOrCreateUserId();
+    currentUser = savedUser;
+    enterChat();
+  } else {
+    showScreen(setupScreen);
+    nameInput.focus();
+  }
+}
+
 passwordBtn.addEventListener("click", handlePassword);
 passwordInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") handlePassword();
@@ -157,6 +242,7 @@ function renderColorPicker() {
     const btn = document.createElement("button");
     btn.className = "color-option";
     btn.style.backgroundColor = color.value;
+    btn.dataset.colorValue = color.value;
     btn.title = color.name;
     btn.setAttribute("aria-label", color.name);
     btn.addEventListener("click", () => {
@@ -168,7 +254,36 @@ function renderColorPicker() {
   });
 }
 
+function selectColorInPicker(value) {
+  selectedColor = null;
+  colorPicker.querySelectorAll(".color-option").forEach((b) => {
+    const match = b.dataset.colorValue === value;
+    b.classList.toggle("selected", match);
+    if (match) selectedColor = value;
+  });
+}
+
 async function handleSetup() {
+  if (isEditingProfile) {
+    const trimmed = (nameInput.value || "").trim();
+    if (!trimmed || !selectedColor) {
+      setupError.textContent = "Ingresa tu nombre y elige un color";
+      return;
+    }
+    setupError.textContent = "";
+    currentUser.name = trimmed;
+    currentUser.color = selectedColor;
+    saveUser(currentUser);
+    saveUserProfile(currentUser).catch((err) => {
+      console.warn("saveUserProfile failed:", err);
+    });
+    updatePresence(currentUser);
+    applyUserPill(currentUser);
+    finishProfileEdit();
+    showScreen(chatScreen);
+    return;
+  }
+
   const user = createUser(nameInput.value, selectedColor, readonlyToggle.checked);
   if (!user) {
     setupError.textContent = "Ingresa tu nombre y elige un color";
@@ -186,6 +301,7 @@ async function handleSetup() {
   }
 
   showScreen(enrollmentScreen);
+  showRandomEnrollmentPhrase();
   enrollmentError.textContent = "";
   enrollmentPitch.textContent = "";
   enrollmentRecordBtn.disabled = true;
@@ -202,7 +318,37 @@ async function handleSetup() {
   enrollmentRecordBtn.disabled = !ok;
 }
 
+function startProfileEdit() {
+  if (!currentUser) return;
+  isEditingProfile = true;
+  setupTitle.textContent = "Cambiar nombre y color";
+  setupBtn.textContent = "Guardar";
+  setupCancelBtn.classList.remove("hidden");
+  // readOnly is locked once chosen — switching mid-session would skip or
+  // require enrollment, and the request is just name + color.
+  if (readonlyToggleLabel) readonlyToggleLabel.classList.add("hidden");
+  nameInput.value = currentUser.name;
+  selectColorInPicker(currentUser.color);
+  setupError.textContent = "";
+  showScreen(setupScreen);
+  nameInput.focus();
+  nameInput.select();
+}
+
+function finishProfileEdit() {
+  isEditingProfile = false;
+  setupTitle.textContent = "Tu nombre y color";
+  setupBtn.textContent = "Unirse";
+  setupCancelBtn.classList.add("hidden");
+  if (readonlyToggleLabel) readonlyToggleLabel.classList.remove("hidden");
+  setupError.textContent = "";
+}
+
 setupBtn.addEventListener("click", handleSetup);
+setupCancelBtn.addEventListener("click", () => {
+  finishProfileEdit();
+  showScreen(chatScreen);
+});
 nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") handleSetup();
 });
@@ -212,6 +358,29 @@ renderColorPicker();
 // ===== Enrollment Screen =====
 
 let pendingVoiceprint = null;
+let lastPhraseIdx = -1;
+
+/**
+ * Pick a random phrase from the pool, avoiding the previous one. Stateful so
+ * a user who taps Grabar twice in a row sees variety.
+ */
+function pickEnrollmentPhrase() {
+  const pool = ENROLLMENT_PHRASES;
+  if (!pool || pool.length === 0) return "";
+  if (pool.length === 1) {
+    lastPhraseIdx = 0;
+    return pool[0];
+  }
+  let idx = Math.floor(Math.random() * pool.length);
+  if (idx === lastPhraseIdx) idx = (idx + 1) % pool.length;
+  lastPhraseIdx = idx;
+  return pool[idx];
+}
+
+function showRandomEnrollmentPhrase() {
+  if (!enrollmentPhraseEl) return;
+  enrollmentPhraseEl.textContent = pickEnrollmentPhrase();
+}
 
 function startEnrollmentLevelLoop() {
   if (!enrollmentLevelBarFill) return;
@@ -281,7 +450,38 @@ async function handleEnrollmentRecord() {
 function handleEnrollmentContinue() {
   if (!pendingVoiceprint) return;
   saveVoiceprint(pendingVoiceprint);
+  if (isReEnrolling) {
+    isReEnrolling = false;
+    cachedVoiceprint = loadVoiceprint();
+    if (cachedVoiceprint) currentUser.voiceprint = cachedVoiceprint;
+    saveUserProfile(currentUser).catch((err) => {
+      console.warn("saveUserProfile failed:", err);
+    });
+    showScreen(chatScreen);
+    if (!currentUser.readOnly && isSupported() && !getIsListening()) {
+      micBtn.click();
+    }
+    return;
+  }
   enterChat();
+}
+
+function startReEnrollment() {
+  isReEnrolling = true;
+  pendingVoiceprint = null;
+  if (getIsListening()) {
+    stopListening();
+    micBtn.classList.remove("listening");
+    micStatus.textContent = "Pausado";
+  }
+  showScreen(enrollmentScreen);
+  showRandomEnrollmentPhrase();
+  enrollmentError.textContent = "";
+  enrollmentPitch.textContent = "";
+  enrollmentRecordBtn.disabled = false;
+  enrollmentContinueBtn.disabled = true;
+  enrollmentStatus.textContent = "Toca grabar y lee la frase";
+  startEnrollmentLevelLoop();
 }
 
 enrollmentRecordBtn.addEventListener("click", handleEnrollmentRecord);
@@ -327,8 +527,28 @@ function publishPitchDebug() {
   });
 }
 
+function applyUserPill(user) {
+  if (!userPill || !user) return;
+  userPillName.textContent = user.name;
+  userPillDot.style.backgroundColor = user.color;
+  userPill.style.color = user.color;
+  userPill.style.borderColor = user.color;
+  // Hex -> rgba(15%) for the pill background. Falls back to the raw value
+  // when the color isn't a 6-digit hex (palette is, but stay defensive).
+  const hex = (user.color || "").replace("#", "");
+  if (hex.length === 6) {
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    userPill.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.14)`;
+  } else {
+    userPill.style.backgroundColor = "transparent";
+  }
+}
+
 function enterChat() {
   showScreen(chatScreen);
+  applyUserPill(currentUser);
   initFirebase();
   initDebugOverlay();
 
@@ -511,3 +731,7 @@ micBtn.addEventListener("click", async () => {
   }
 });
 
+// Auto-skip the password screen if a recent validation is still fresh.
+// Runs at module load — DOM is ready since the script is loaded after
+// index.html parses past the chat screen.
+tryAutoEnter();
