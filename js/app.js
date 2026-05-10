@@ -26,6 +26,7 @@ import {
 import { isSupported, toggleListening, stopListening, getIsListening } from "./speech.js";
 import {
   startAudioLevelMonitor,
+  stopAudioLevelMonitor,
   shouldSend,
   getCurrentLevel,
   isMonitorDegraded,
@@ -33,6 +34,7 @@ import {
 } from "./audio-level.js";
 import {
   startPitchDetector,
+  stopPitchDetector,
   getRecentPitchSamples,
   getRecentPitchStats,
   inPitchBand,
@@ -123,6 +125,27 @@ let interimElement = null;
 let cachedVoiceprint = null;
 let isReEnrolling = false;
 let isEditingProfile = false;
+let audioMonitorAttempted = false;
+
+// Bring the audio gate online after speech recognition is running. Idempotent
+// per chat session — flag is reset in enterChat. Soft-fails: if the platform
+// rejects a parallel getUserMedia (Android Chrome with active recognizer,
+// iOS Safari), the monitor stays in "failed" state and shouldSend() defaults
+// open, so the app keeps transcribing without the gate.
+async function ensureAudioMonitor() {
+  if (audioMonitorAttempted) return;
+  audioMonitorAttempted = true;
+  try {
+    const ok = await startAudioLevelMonitor();
+    dlog("audio", "monitor:", ok ? "running" : "failed");
+    if (ok) {
+      const pitchOk = startPitchDetector();
+      dlog("pitch", "detector:", pitchOk ? "running" : "failed");
+    }
+  } catch (_e) {
+    /* gate stays open, pitch detector stays idle */
+  }
+}
 
 // ===== Font Size Control =====
 const FONT_SIZES = [0.9, 1, 1.15, 1.3, 1.5, 1.8, 2.2];
@@ -725,19 +748,13 @@ function enterChat() {
     console.warn("saveUserProfile failed:", err);
   });
 
-  // Persistent mic for the audio gate. Soft-fails on iOS and on denial —
-  // shouldSend() returns true when the monitor isn't running, so the app
-  // keeps working with the gate effectively bypassed. The pitch detector
-  // attaches to the same audio graph; it also soft-fails open.
-  startAudioLevelMonitor()
-    .then((ok) => {
-      dlog("audio", "monitor:", ok ? "running" : "failed");
-      if (ok) {
-        const pitchOk = startPitchDetector();
-        dlog("pitch", "detector:", pitchOk ? "running" : "failed");
-      }
-    })
-    .catch(() => { /* gate stays open, pitch detector stays idle */ });
+  // Release any mic stream left running by enrollment. On Android Chrome,
+  // webkitSpeechRecognition.start() throws "service-not-allowed" while the
+  // page is holding an open getUserMedia stream — so the monitor + pitch
+  // detector are re-armed lazily from onStateChange after speech is up.
+  stopPitchDetector();
+  stopAudioLevelMonitor();
+  audioMonitorAttempted = false;
   startMicLevelBarLoop();
 
   // Listen for messages
@@ -874,6 +891,7 @@ micBtn.addEventListener("click", async () => {
       if (listening) {
         micBtn.classList.add("listening");
         micStatus.textContent = "Escuchando...";
+        ensureAudioMonitor();
       } else {
         micBtn.classList.remove("listening");
         micStatus.textContent = "Toca para hablar";

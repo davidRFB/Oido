@@ -10,8 +10,6 @@ let recognition = null;
 let isListening = false;
 let restartTimer = null;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const MOBILE_RESTART_DELAY = 500; // ms to wait before restarting on mobile
 
 /**
@@ -138,11 +136,12 @@ export async function startListening(callbacks) {
   }
 
   // Request mic permission before starting speech recognition.
-  // Skipped on iOS: the await boundary breaks the user-gesture chain that
-  // webkitSpeechRecognition.start() needs, so the engine never actually
-  // starts even after the user taps Allow. Letting recognition.start()
-  // request permission itself works around iOS Chrome/Safari quirks.
-  if (!isIOS) {
+  // Skipped on mobile: the await boundary breaks the user-gesture chain that
+  // webkitSpeechRecognition.start() needs (iOS Safari/Chrome), and on Android
+  // Chrome, opening a getUserMedia stream right before start() is one of the
+  // failure modes that surfaces as "service-not-allowed". Letting
+  // recognition.start() request permission itself works around both quirks.
+  if (!isMobile) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());

@@ -27,10 +27,13 @@ export const AUDIO_RING_CAPACITY = 256;
 // builds) hand the audio-level analyser a parallel mic stream that returns
 // near-silence while webkitSpeechRecognition gets the real audio. Symptom:
 // the recognizer transcribes a sentence but the gate reads RMS ~0 and drops
-// everything. After this grace period, if the analyser has never observed
-// peak RMS above the floor, treat the stream as degraded → fail open.
+// everything. After the grace period, if the recent-window peak stays below
+// the floor, treat the stream as degraded → fail open. Recent-window check
+// (vs lifetime peak) is robust against startup glitches that otherwise leave
+// the bypass permanently disabled.
 export const MONITOR_DEGRADED_GRACE_MS = 4000;
-export const MONITOR_DEGRADED_FLOOR_RMS = 0.0015;
+export const MONITOR_DEGRADED_RECENT_MS = 3000;
+export const MONITOR_DEGRADED_FLOOR_RMS = 0.005;
 
 // Cross-device dedup (Feature B). When a peer's message looks near-identical to
 // one received in the last DEDUP_WINDOW_MS from a different user, don't render.
