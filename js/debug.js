@@ -1,16 +1,23 @@
 /**
- * Lightweight debug module. Opt-in via URL `?debug=1` (persisted to
- * sessionStorage so reloads keep it on). When enabled:
- *   - dlog(category, ...) writes timestamped console lines.
- *   - A floating overlay shows live threshold/gate state and counters.
+ * Debug + diagnostics module.
  *
- * Pure no-op when disabled, so production cost is one boolean check per call.
+ * - dlog(category, ...) ALWAYS records into an in-memory ring buffer (so the
+ *   Diagnóstico panel can show recent activity to non-developer users).
+ *   Console output stays gated by `?debug=1` so the production console isn't
+ *   spammed.
+ * - When ?debug=1 is on, a floating overlay shows live threshold/gate/pitch
+ *   state plus counters.
+ *
+ * The ring buffer is small and fixed-size, so production overhead is bounded.
  */
 
 let enabled = null;
 let overlay = null;
 let fields = {};
 const counters = { sent: 0, recv: 0, dropped: 0, gateDrop: 0, pitchDrop: 0, autoPromote: 0, engineSuppressed: 0 };
+
+const LOG_CAPACITY = 200;
+const recentLogs = []; // FIFO, evict from front when full
 
 function readEnabled() {
   try {
@@ -34,10 +41,68 @@ export function isDebugEnabled() {
   return enabled;
 }
 
+function stringifyArg(a) {
+  if (a === null || a === undefined) return String(a);
+  if (typeof a === "string") return a;
+  if (typeof a === "number" || typeof a === "boolean") return String(a);
+  try { return JSON.stringify(a); } catch { return String(a); }
+}
+
 export function dlog(category, ...args) {
-  if (!isDebugEnabled()) return;
   const t = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
+  // Always record so Diagnóstico can show recent events to non-dev users.
+  const msg = args.map(stringifyArg).join(" ");
+  if (recentLogs.length >= LOG_CAPACITY) recentLogs.shift();
+  recentLogs.push({ t, category, msg });
+  if (!isDebugEnabled()) return;
   console.log(`[${t}] ${category}`, ...args);
+}
+
+/**
+ * Recent log entries, oldest first. Returns a shallow copy.
+ */
+export function getRecentLogs() {
+  return recentLogs.slice();
+}
+
+/**
+ * Format the recent log buffer as plain text — suitable for "Copiar registro"
+ * so a non-developer can paste it into WhatsApp.
+ */
+export function getRecentLogsAsText() {
+  return recentLogs.map((l) => `[${l.t}] ${l.category} ${l.msg}`).join("\n");
+}
+
+/**
+ * Synchronous capability snapshot of the runtime. The Diagnóstico panel
+ * renders this so the family can see what's missing on each device.
+ */
+export function getCapabilities() {
+  const speechApi = !!(typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition));
+  const mediaDevices = !!(typeof navigator !== "undefined" &&
+    navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const audioContext = !!(typeof window !== "undefined" &&
+    (window.AudioContext || window.webkitAudioContext));
+  const online = typeof navigator !== "undefined" ? navigator.onLine : true;
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const platform = typeof navigator !== "undefined" ? navigator.platform : "";
+  return { speechApi, mediaDevices, audioContext, online, ua, platform };
+}
+
+/**
+ * Resolve the current microphone permission state. Returns one of:
+ * "granted" | "denied" | "prompt" | "unknown" — falls back to "unknown" on
+ * browsers that don't expose the Permissions API for `microphone`.
+ */
+export async function getMicPermission() {
+  try {
+    if (typeof navigator !== "undefined" && navigator.permissions && navigator.permissions.query) {
+      const res = await navigator.permissions.query({ name: "microphone" });
+      return res.state;
+    }
+  } catch (_e) { /* unsupported on Firefox/Safari sometimes */ }
+  return "unknown";
 }
 
 function fmt(n) {

@@ -57,7 +57,20 @@
   <!-- Screen 3: Voice Enrollment -->
   <div id="enrollment-screen" class="screen">
     <h2>Tu voz</h2>
-    <p class="enrollment-instruction">Lee esta frase en voz alta para que la app reconozca tu voz</p>
+    <ol class="enrollment-steps" aria-label="Pasos para grabar tu voz">
+      <li>
+        <span class="step-num">1</span>
+        <span class="step-text">Toca <strong>Grabar</strong></span>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <span class="step-text">Lee en voz alta (~15&nbsp;s)</span>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <span class="step-text">Toca <strong>Continuar</strong></span>
+      </li>
+    </ol>
     <div class="enrollment-phrase" id="enrollment-phrase"></div>
     <div class="mic-level-bar enrollment-bar">
       <div class="mic-level-bar-fill" id="enrollment-level-bar-fill"></div>
@@ -109,6 +122,12 @@
               </svg>
               <span>Re-grabar voz</span>
             </button>
+            <button class="settings-item" id="settings-diagnostics">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+              <span>Diagnóstico</span>
+            </button>
             <div class="settings-separator" role="separator"></div>
             <button class="settings-item" id="settings-logout">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -149,6 +168,11 @@
       <!-- Messages will be rendered here -->
     </div>
 
+    <div class="support-banner hidden" id="support-banner" role="alert">
+      <span id="support-banner-text">Este navegador no soporta reconocimiento de voz.</span>
+      <button class="support-banner-btn" id="support-banner-btn" type="button">Diagnóstico</button>
+    </div>
+
     <div class="chat-footer">
       <button class="mic-btn" id="mic-btn" title="Activar microfono">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -158,6 +182,40 @@
         </svg>
       </button>
       <span class="mic-status" id="mic-status">Toca para hablar</span>
+    </div>
+  </div>
+
+  <!-- Diagnostic Modal -->
+  <div id="diag-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="diag-title">
+    <div class="modal-backdrop" id="diag-backdrop"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="diag-title">Diagnóstico</h2>
+        <button class="icon-btn" id="diag-close-btn" type="button" aria-label="Cerrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <section class="diag-section">
+          <h3>Plataforma</h3>
+          <table class="diag-table"><tbody id="diag-caps"></tbody></table>
+        </section>
+        <section class="diag-section">
+          <h3>Estado</h3>
+          <table class="diag-table"><tbody id="diag-state"></tbody></table>
+        </section>
+        <section class="diag-section">
+          <h3>Registro reciente</h3>
+          <pre class="diag-logs" id="diag-logs"></pre>
+        </section>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="diag-copy-btn" type="button">Copiar registro</button>
+        <button class="btn" id="diag-refresh-btn" type="button">Actualizar</button>
+      </div>
     </div>
   </div>
 

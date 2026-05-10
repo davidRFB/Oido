@@ -41,7 +41,15 @@ import {
   PITCH_TOLERANCE_STDDEV,
   PITCH_MIN_SAMPLES,
 } from "./config.js";
-import { dlog, initDebugOverlay, bumpCounter, updatePitchStats } from "./debug.js";
+import {
+  dlog,
+  initDebugOverlay,
+  bumpCounter,
+  updatePitchStats,
+  getRecentLogsAsText,
+  getCapabilities,
+  getMicPermission,
+} from "./debug.js";
 
 // DOM elements
 const passwordScreen = document.getElementById("password-screen");
@@ -86,8 +94,22 @@ const settingsBtn = document.getElementById("settings-btn");
 const settingsList = document.getElementById("settings-list");
 const settingsEditProfile = document.getElementById("settings-edit-profile");
 const settingsRerecord = document.getElementById("settings-rerecord");
+const settingsDiagnostics = document.getElementById("settings-diagnostics");
 const settingsLogout = document.getElementById("settings-logout");
 const settingsClear = document.getElementById("settings-clear");
+
+const supportBanner = document.getElementById("support-banner");
+const supportBannerText = document.getElementById("support-banner-text");
+const supportBannerBtn = document.getElementById("support-banner-btn");
+
+const diagModal = document.getElementById("diag-modal");
+const diagBackdrop = document.getElementById("diag-backdrop");
+const diagCloseBtn = document.getElementById("diag-close-btn");
+const diagCopyBtn = document.getElementById("diag-copy-btn");
+const diagRefreshBtn = document.getElementById("diag-refresh-btn");
+const diagCaps = document.getElementById("diag-caps");
+const diagState = document.getElementById("diag-state");
+const diagLogs = document.getElementById("diag-logs");
 
 let currentUser = null;
 let selectedColor = null;
@@ -177,6 +199,125 @@ settingsLogout.addEventListener("click", () => {
   clearAuthFresh();
   location.reload();
 });
+
+settingsDiagnostics.addEventListener("click", () => {
+  closeSettings();
+  openDiagnostics();
+});
+
+// ===== Diagnostic Modal =====
+
+function rowHTML(label, value, cls) {
+  const c = cls ? ` class="${cls}"` : "";
+  return `<tr><td>${label}</td><td${c}>${value}</td></tr>`;
+}
+
+async function refreshDiagnostics() {
+  const caps = getCapabilities();
+  const micPerm = await getMicPermission();
+  const speechRow = caps.speechApi
+    ? rowHTML("Reconocimiento de voz", "Disponible", "diag-ok")
+    : rowHTML("Reconocimiento de voz", "NO disponible", "diag-bad");
+  const mediaRow = caps.mediaDevices
+    ? rowHTML("Acceso al micrófono (API)", "Disponible", "diag-ok")
+    : rowHTML("Acceso al micrófono (API)", "NO disponible", "diag-bad");
+  const audioRow = caps.audioContext
+    ? rowHTML("AudioContext", "Disponible", "diag-ok")
+    : rowHTML("AudioContext", "NO disponible", "diag-bad");
+  const onlineRow = caps.online
+    ? rowHTML("Internet", "Conectado", "diag-ok")
+    : rowHTML("Internet", "SIN conexión", "diag-bad");
+  let permCls = "diag-warn";
+  let permLabel = micPerm;
+  if (micPerm === "granted") { permCls = "diag-ok"; permLabel = "Permitido"; }
+  else if (micPerm === "denied") { permCls = "diag-bad"; permLabel = "Denegado"; }
+  else if (micPerm === "prompt") { permCls = "diag-warn"; permLabel = "Pendiente"; }
+  else { permCls = "diag-warn"; permLabel = "Desconocido"; }
+  const permRow = rowHTML("Permiso del micrófono", permLabel, permCls);
+  const uaRow = rowHTML("Navegador", caps.ua || "—");
+
+  diagCaps.innerHTML = speechRow + mediaRow + audioRow + permRow + onlineRow + uaRow;
+
+  const listening = getIsListening();
+  const vp = loadVoiceprint();
+  const stateRows = [
+    rowHTML("Modo solo lectura", currentUser && currentUser.readOnly ? "Sí" : "No",
+      currentUser && currentUser.readOnly ? "diag-warn" : "diag-ok"),
+    rowHTML("Voz registrada", vp ? `Sí (${Math.round(vp.f0_mean)} Hz)` : "No",
+      vp ? "diag-ok" : "diag-warn"),
+    rowHTML("Escuchando", listening ? "Sí" : "No", listening ? "diag-ok" : "diag-warn"),
+    rowHTML("Estado del micrófono", micStatus.textContent || "—"),
+  ];
+  diagState.innerHTML = stateRows.join("");
+
+  diagLogs.textContent = getRecentLogsAsText() || "(sin eventos aún)";
+  // Auto-scroll the log to the bottom so the most recent line is visible.
+  diagLogs.scrollTop = diagLogs.scrollHeight;
+}
+
+function openDiagnostics() {
+  refreshDiagnostics();
+  diagModal.classList.remove("hidden");
+}
+
+function closeDiagnostics() {
+  diagModal.classList.add("hidden");
+}
+
+diagCloseBtn.addEventListener("click", closeDiagnostics);
+diagBackdrop.addEventListener("click", closeDiagnostics);
+diagRefreshBtn.addEventListener("click", refreshDiagnostics);
+diagCopyBtn.addEventListener("click", async () => {
+  const text = getRecentLogsAsText();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      diagCopyBtn.textContent = "Copiado!";
+    } else {
+      // Fallback for older mobile browsers without async clipboard API.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      diagCopyBtn.textContent = "Copiado!";
+    }
+  } catch (_e) {
+    diagCopyBtn.textContent = "Error al copiar";
+  }
+  setTimeout(() => { diagCopyBtn.textContent = "Copiar registro"; }, 1800);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !diagModal.classList.contains("hidden")) {
+    closeDiagnostics();
+  }
+});
+
+// ===== Support Banner =====
+
+function refreshSupportBanner() {
+  if (!supportBanner) return;
+  const caps = getCapabilities();
+  const issues = [];
+  if (!caps.speechApi) issues.push("reconocimiento de voz");
+  if (!caps.mediaDevices) issues.push("micrófono");
+  if (!caps.audioContext) issues.push("AudioContext");
+  if (issues.length === 0) {
+    supportBanner.classList.add("hidden");
+    return;
+  }
+  supportBannerText.textContent =
+    "Tu navegador no soporta: " + issues.join(", ") + ". El micrófono no funcionará.";
+  supportBanner.classList.remove("hidden");
+}
+
+if (supportBannerBtn) {
+  supportBannerBtn.addEventListener("click", () => openDiagnostics());
+}
 
 // ===== Screen Navigation =====
 
@@ -549,6 +690,7 @@ function applyUserPill(user) {
 function enterChat() {
   showScreen(chatScreen);
   applyUserPill(currentUser);
+  refreshSupportBanner();
   initFirebase();
   initDebugOverlay();
 
