@@ -36,7 +36,7 @@ import {
   PITCH_TOLERANCE_STDDEV,
   PITCH_MIN_SAMPLES,
 } from "./config.js";
-import { dlog, initDebugOverlay, bumpCounter } from "./debug.js";
+import { dlog, initDebugOverlay, bumpCounter, updatePitchStats } from "./debug.js";
 
 // DOM elements
 const passwordScreen = document.getElementById("password-screen");
@@ -266,6 +266,11 @@ async function handleEnrollmentRecord() {
     f0_samples: samples.length,
     enrolled_at: Date.now(),
   };
+  dlog("enrollment", "captured", {
+    mean: Math.round(mean),
+    stddev: +stddev.toFixed(2),
+    n: samples.length,
+  });
 
   enrollmentStatus.textContent =
     "Listo: " + Math.round(mean) + " Hz, " + samples.length + " muestras";
@@ -292,9 +297,34 @@ function startMicLevelBarLoop() {
     // Map 0..0.5 RMS to 0..100% so normal speech fills most of the bar.
     fill.style.width = Math.min(100, Math.round(lvl * 200)) + "%";
     fill.classList.toggle("above-threshold", lvl >= AUDIO_GATE_THRESHOLD);
+    publishPitchDebug();
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+}
+
+/**
+ * Push the current pitch state into the debug overlay. No-op when debug is
+ * off (updatePitchStats short-circuits), so this is safe to call per-frame.
+ */
+function publishPitchDebug() {
+  const stats = getRecentPitchStats(PITCH_WINDOW_MS);
+  let inBand;
+  if (!cachedVoiceprint) {
+    inBand = "—";
+  } else if (stats.n < PITCH_MIN_SAMPLES || stats.median === null) {
+    inBand = "?";
+  } else {
+    inBand = inPitchBand(stats.median, cachedVoiceprint, PITCH_TOLERANCE_STDDEV) ? "OK" : "BAD";
+  }
+  updatePitchStats({
+    median: stats.median,
+    n: stats.n,
+    inBand,
+    vpMean: cachedVoiceprint ? cachedVoiceprint.f0_mean : null,
+    vpStddev: cachedVoiceprint ? cachedVoiceprint.f0_stddev : null,
+    vpTolerance: PITCH_TOLERANCE_STDDEV,
+  });
 }
 
 function enterChat() {
@@ -320,7 +350,13 @@ function enterChat() {
   // keeps working with the gate effectively bypassed. The pitch detector
   // attaches to the same audio graph; it also soft-fails open.
   startAudioLevelMonitor()
-    .then((ok) => { if (ok) startPitchDetector(); })
+    .then((ok) => {
+      dlog("audio", "monitor:", ok ? "running" : "failed");
+      if (ok) {
+        const pitchOk = startPitchDetector();
+        dlog("pitch", "detector:", pitchOk ? "running" : "failed");
+      }
+    })
     .catch(() => { /* gate stays open, pitch detector stays idle */ });
   startMicLevelBarLoop();
 
@@ -423,6 +459,7 @@ micBtn.addEventListener("click", async () => {
       if (!shouldSend()) {
         dlog("send", "GATE-DROP", text);
         bumpCounter("dropped", `gate-drop: ${text}`);
+        bumpCounter("gateDrop");
         return;
       }
       // Pitch gate: drop when the recent F0 distribution doesn't match the
@@ -435,8 +472,10 @@ micBtn.addEventListener("click", async () => {
           stats.median !== null &&
           !inPitchBand(stats.median, cachedVoiceprint, PITCH_TOLERANCE_STDDEV)
         ) {
-          dlog("send", "PITCH-DROP", text, Math.round(stats.median));
+          dlog("send", "PITCH-DROP", text, Math.round(stats.median) + "Hz",
+            "vs", Math.round(cachedVoiceprint.f0_mean) + "Hz");
           bumpCounter("dropped", `pitch-drop: ${Math.round(stats.median)}Hz: ${text}`);
+          bumpCounter("pitchDrop");
           return;
         }
       }

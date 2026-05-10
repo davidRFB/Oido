@@ -10,7 +10,7 @@
 let enabled = null;
 let overlay = null;
 let fields = {};
-const counters = { sent: 0, recv: 0, dropped: 0, autoPromote: 0, engineSuppressed: 0 };
+const counters = { sent: 0, recv: 0, dropped: 0, gateDrop: 0, pitchDrop: 0, autoPromote: 0, engineSuppressed: 0 };
 
 function readEnabled() {
   try {
@@ -70,16 +70,26 @@ function buildOverlay() {
   return el;
 }
 
+function fmtHz(n) {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  return Math.round(n) + "Hz";
+}
+
 function render() {
   if (!overlay) return;
   const f = fields;
+  const band = (typeof f.vpMean === "number" && typeof f.vpStddev === "number" && typeof f.vpTolerance === "number")
+    ? `${fmtHz(f.vpMean)}±${fmtHz(f.vpTolerance * f.vpStddev)}`
+    : "—";
   overlay.textContent =
     `RMS:    ${fmt(f.rms)}\n` +
     `Ambient:${fmt(f.ambient)}  (×${fmt(f.multiplier)})\n` +
     `Thresh: ${fmt(f.threshold)}\n` +
     `Gate:   ${f.gate || "—"}\n` +
+    `Pitch:  ${fmtHz(f.pitchMedian)}  n=${f.pitchN ?? 0}  ${f.pitchInBand || "—"}\n` +
+    `Voice:  ${band}\n` +
     `Sent:${counters.sent}  Recv:${counters.recv}  Drop:${counters.dropped}\n` +
-    `AutoPromote:${counters.autoPromote}  EngSupp:${counters.engineSuppressed}\n` +
+    `GateDrop:${counters.gateDrop}  PitchDrop:${counters.pitchDrop}\n` +
     `Last:   ${f.lastEvent || "—"}`;
 }
 
@@ -101,6 +111,22 @@ export function updateGateStats({ rms, ambient, multiplier, threshold, gate }) {
   fields.multiplier = multiplier;
   fields.threshold = threshold;
   fields.gate = gate;
+  render();
+}
+
+/**
+ * Live pitch state for the overlay. inBand may be "OK", "BAD", "?" (insufficient
+ * samples), or "—" (no voiceprint). Voiceprint fields publish the current band
+ * so an operator can see what the gate is checking against.
+ */
+export function updatePitchStats({ median, n, inBand, vpMean, vpStddev, vpTolerance }) {
+  if (!isDebugEnabled()) return;
+  fields.pitchMedian = median;
+  fields.pitchN = n;
+  fields.pitchInBand = inBand;
+  if (vpMean !== undefined) fields.vpMean = vpMean;
+  if (vpStddev !== undefined) fields.vpStddev = vpStddev;
+  if (vpTolerance !== undefined) fields.vpTolerance = vpTolerance;
   render();
 }
 
