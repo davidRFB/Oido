@@ -450,11 +450,13 @@ input:focus {
 /* ===== Version Tag ===== */
 .version-tag {
   position: fixed;
-  bottom: 4px;
+  bottom: 6px;
   right: 8px;
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
-  opacity: 0.5;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   pointer-events: none;
   user-select: none;

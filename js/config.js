@@ -16,7 +16,7 @@ export const COLOR_PALETTE = [
 // Audio gate (Feature A). RMS amplitude in [0,1]. Drops final speech results
 // when local mic was quiet — i.e., the speech came from another phone's owner
 // across the room, not this phone's owner.
-export const AUDIO_GATE_THRESHOLD = 0.10;
+export const AUDIO_GATE_THRESHOLD = 0.05;
 // Window must be longer than the recognizer's silence-before-final delay
 // (~1–2s on mobile) so the gate still sees the loud speech that triggered
 // the final result.
