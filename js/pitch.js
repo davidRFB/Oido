@@ -84,6 +84,23 @@ export function autocorrelateF0(buf, sampleRate, fmin, fmax) {
 }
 
 /**
+ * Pure helper: returns true when median Hz lies within
+ * voiceprint.f0_mean +/- toleranceStddev * stddev. Default-allows (returns
+ * true) when median is null or the voiceprint is missing/invalid so the gate
+ * degrades to the existing audio-level behavior. The stddev floor stops a
+ * too-stable enrollment (a low f0_stddev) from producing an absurdly tight
+ * band that rejects normal speech variation.
+ */
+export function inPitchBand(median, voiceprint, toleranceStddev, minStddev = 8) {
+  if (median === null || median === undefined || !Number.isFinite(median)) return true;
+  if (!voiceprint || typeof voiceprint.f0_mean !== "number" || typeof voiceprint.f0_stddev !== "number") {
+    return true;
+  }
+  const stddev = Math.max(voiceprint.f0_stddev, minStddev);
+  return Math.abs(median - voiceprint.f0_mean) <= toleranceStddev * stddev;
+}
+
+/**
  * Pure helper: median Hz across samples whose t falls in [nowMs - windowMs, nowMs].
  * Returns null when no in-window samples exist.
  */

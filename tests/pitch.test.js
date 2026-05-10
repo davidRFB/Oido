@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   autocorrelateF0,
   medianInWindow,
+  inPitchBand,
   getRecentPitchStats,
   getRecentPitchSamples,
   _pushPitchForTest,
@@ -98,6 +99,42 @@ describe("medianInWindow", () => {
       { t: 700, hz: 200 },
     ];
     expect(medianInWindow(samples, 1000, 500)).toBe(200);
+  });
+});
+
+describe("inPitchBand", () => {
+  const profile = { f0_mean: 200, f0_stddev: 20, f0_samples: 30 };
+
+  it("default-allows when voiceprint is missing", () => {
+    expect(inPitchBand(180, null, 2.5)).toBe(true);
+    expect(inPitchBand(180, undefined, 2.5)).toBe(true);
+    expect(inPitchBand(180, { f0_mean: "x" }, 2.5)).toBe(true);
+  });
+
+  it("default-allows when median is null/undefined/non-finite", () => {
+    expect(inPitchBand(null, profile, 2.5)).toBe(true);
+    expect(inPitchBand(undefined, profile, 2.5)).toBe(true);
+    expect(inPitchBand(NaN, profile, 2.5)).toBe(true);
+  });
+
+  it("accepts medians inside the tolerance band", () => {
+    // band half-width = 2.5 * 20 = 50, so [150, 250] is inside.
+    expect(inPitchBand(200, profile, 2.5)).toBe(true);
+    expect(inPitchBand(180, profile, 2.5)).toBe(true);
+    expect(inPitchBand(150, profile, 2.5)).toBe(true);
+    expect(inPitchBand(250, profile, 2.5)).toBe(true);
+  });
+
+  it("rejects medians outside the tolerance band", () => {
+    expect(inPitchBand(149, profile, 2.5)).toBe(false);
+    expect(inPitchBand(251, profile, 2.5)).toBe(false);
+    expect(inPitchBand(120, profile, 2.5)).toBe(false);
+  });
+
+  it("floors stddev at minStddev so an over-stable enrollment doesn't make the band absurdly tight", () => {
+    const tight = { f0_mean: 200, f0_stddev: 1, f0_samples: 30 };
+    // Without flooring: band would be 200 +/- 2.5, rejecting 210. With floor of 8: band 200 +/- 20, accepting 210.
+    expect(inPitchBand(210, tight, 2.5, 8)).toBe(true);
   });
 });
 

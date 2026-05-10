@@ -21,12 +21,20 @@ import {
 } from "./chat.js";
 import { isSupported, toggleListening } from "./speech.js";
 import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
-import { startPitchDetector, getRecentPitchSamples, getRecentPitchStats } from "./pitch.js";
+import {
+  startPitchDetector,
+  getRecentPitchSamples,
+  getRecentPitchStats,
+  inPitchBand,
+} from "./pitch.js";
 import { shouldRenderIncoming } from "./dedup.js";
 import {
   AUDIO_GATE_THRESHOLD,
   ENROLLMENT_DURATION_MS,
   ENROLLMENT_MIN_SAMPLES,
+  PITCH_WINDOW_MS,
+  PITCH_TOLERANCE_STDDEV,
+  PITCH_MIN_SAMPLES,
 } from "./config.js";
 import { dlog, initDebugOverlay, bumpCounter } from "./debug.js";
 
@@ -67,6 +75,7 @@ const clearBtn = document.getElementById("clear-btn");
 let currentUser = null;
 let selectedColor = null;
 let interimElement = null;
+let cachedVoiceprint = null;
 
 // ===== Font Size Control =====
 const FONT_SIZES = [0.9, 1, 1.15, 1.3, 1.5, 1.8, 2.2];
@@ -295,10 +304,10 @@ function enterChat() {
 
   // Mirror the local voiceprint into the user profile so peers can resolve
   // userId -> name/color (and later, voiceprint when we want cross-device
-  // sync). Local pitch gate uses the localStorage copy directly — Firebase
-  // is not in the hot path.
-  const voiceprint = loadVoiceprint();
-  if (voiceprint) currentUser.voiceprint = voiceprint;
+  // sync). Local pitch gate uses this cached copy directly — Firebase is
+  // not in the hot path.
+  cachedVoiceprint = loadVoiceprint();
+  if (cachedVoiceprint) currentUser.voiceprint = cachedVoiceprint;
 
   // Best-effort profile sync. Failures (offline, rules) are logged but don't
   // block entering chat.
@@ -415,6 +424,21 @@ micBtn.addEventListener("click", async () => {
         dlog("send", "GATE-DROP", text);
         bumpCounter("dropped", `gate-drop: ${text}`);
         return;
+      }
+      // Pitch gate: drop when the recent F0 distribution doesn't match the
+      // device owner's voiceprint. Default-allows when no voiceprint or too
+      // few pitch samples — same soft-fail philosophy as the audio gate.
+      if (cachedVoiceprint) {
+        const stats = getRecentPitchStats(PITCH_WINDOW_MS);
+        if (
+          stats.n >= PITCH_MIN_SAMPLES &&
+          stats.median !== null &&
+          !inPitchBand(stats.median, cachedVoiceprint, PITCH_TOLERANCE_STDDEV)
+        ) {
+          dlog("send", "PITCH-DROP", text, Math.round(stats.median));
+          bumpCounter("dropped", `pitch-drop: ${Math.round(stats.median)}Hz: ${text}`);
+          return;
+        }
       }
       dlog("send", text);
       bumpCounter("sent", `sent: ${text}`);
