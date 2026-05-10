@@ -104,5 +104,25 @@
     })();
   </script>
 
+  <!-- Register the SW that forces fresh HTML. Once a client has this code,
+       every future build is picked up automatically: a controllerchange
+       reload runs as soon as the new SW activates. -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./sw.js").then(function (reg) {
+          reg.update();
+        }).catch(function () { /* ignore */ });
+
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener("controllerchange", function () {
+          if (refreshing) return;
+          refreshing = true;
+          location.reload();
+        });
+      });
+    }
+  </script>
+
 </body>
 </html>
