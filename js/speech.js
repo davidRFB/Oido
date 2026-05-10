@@ -8,6 +8,8 @@ let recognition = null;
 let isListening = false;
 let restartTimer = null;
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const MOBILE_RESTART_DELAY = 500; // ms to wait before restarting on mobile
 
 /**
@@ -117,13 +119,19 @@ export async function startListening(callbacks) {
     return false;
   }
 
-  // Request mic permission before starting speech recognition
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((track) => track.stop());
-  } catch (_e) {
-    callbacks.onError?.({ error: "not-allowed", message: "Permiso de microfono denegado. Activalo en ajustes del navegador." });
-    return false;
+  // Request mic permission before starting speech recognition.
+  // Skipped on iOS: the await boundary breaks the user-gesture chain that
+  // webkitSpeechRecognition.start() needs, so the engine never actually
+  // starts even after the user taps Allow. Letting recognition.start()
+  // request permission itself works around iOS Chrome/Safari quirks.
+  if (!isIOS) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch (_e) {
+      callbacks.onError?.({ error: "not-allowed", message: "Permiso de microfono denegado. Activalo en ajustes del navegador." });
+      return false;
+    }
   }
 
   if (recognition) {
@@ -137,8 +145,8 @@ export async function startListening(callbacks) {
     recognition.start();
     isListening = true;
     return true;
-  } catch (_e) {
-    callbacks.onError?.({ error: "start-failed", message: "No se pudo iniciar el reconocimiento de voz" });
+  } catch (e) {
+    callbacks.onError?.({ error: "start-failed", message: "No se pudo iniciar: " + (e && e.message ? e.message : e) });
     return false;
   }
 }
