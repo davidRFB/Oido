@@ -40,7 +40,7 @@ export const PITCH_RING_CAPACITY = 384;    // ~6s of samples at 60fps
 export const PITCH_WINDOW_MS = 1500;       // window queried at gate time
 export const PITCH_MIN_SAMPLES = 8;        // below this, default-allow (insufficient data)
 export const PITCH_TOLERANCE_STDDEV = 2.5; // band half-width in stddevs
-export const PITCH_VOICED_RMS = 0.005;     // below this RMS, treat the buffer as silence
+export const PITCH_VOICED_RMS = 0.025;     // below this RMS, treat the buffer as silence (above ambient, below quiet speech)
 
 // Voice enrollment.
 export const ENROLLMENT_DURATION_MS = 5000;

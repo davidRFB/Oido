@@ -27,15 +27,24 @@ let ringIdx = 0;
 let detectorState = "idle"; // idle | running | failed
 
 /**
- * Pure helper: estimate F0 from a time-domain Float32 buffer using normalized
- * autocorrelation with parabolic peak interpolation. Returns null when the
- * buffer is silent, or when no τ in [sampleRate/fmax, sampleRate/fmin]
- * produces a peak above the confidence threshold.
+ * Pure helper: estimate F0 from a time-domain Float32 buffer.
+ *
+ * Two corrections vs naive autocorrelation:
+ *   1. Per-pair normalization (corr / (N - τ)) — without it, smaller τ
+ *      accumulates more terms and wins by default on noisy real-world audio,
+ *      locking the detector to high frequencies for low-pitched speech.
+ *   2. Lowest-octave bias — at integer multiples of the true period
+ *      (τ, 2τ, 3τ, …) the coefficient is identical in theory and only
+ *      differs by float-point rounding. Picking the smallest τ that's a
+ *      local maximum within 85% of the global best avoids spurious
+ *      sub-octave detections like reporting 167 Hz for a 250 Hz signal.
+ *
+ * Returns null when the buffer is silent or the best peak doesn't clear
+ * the confidence floor.
  */
 export function autocorrelateF0(buf, sampleRate, fmin, fmax) {
   if (!buf || buf.length < 64 || !sampleRate) return null;
 
-  // Voicing check — silent buffers produce noise pitch estimates.
   let r0 = 0;
   for (let i = 0; i < buf.length; i++) r0 += buf[i] * buf[i];
   const rms = Math.sqrt(r0 / buf.length);
@@ -43,39 +52,52 @@ export function autocorrelateF0(buf, sampleRate, fmin, fmax) {
 
   const tauMin = Math.max(2, Math.floor(sampleRate / fmax));
   const tauMax = Math.min(Math.floor(sampleRate / fmin), Math.floor(buf.length / 2));
-  if (tauMax <= tauMin) return null;
+  if (tauMax <= tauMin + 1) return null;
 
-  let bestTau = -1;
-  let bestCorr = -Infinity;
+  const energyPerSample = r0 / buf.length;
+  if (energyPerSample === 0) return null;
+
+  const span = tauMax - tauMin + 1;
+  const coeffs = new Float32Array(span);
+  let globalBest = -Infinity;
   for (let tau = tauMin; tau <= tauMax; tau++) {
     let corr = 0;
     const limit = buf.length - tau;
     for (let i = 0; i < limit; i++) {
       corr += buf[i] * buf[i + tau];
     }
-    if (corr > bestCorr) {
-      bestCorr = corr;
-      bestTau = tau;
+    const coeff = (corr / limit) / energyPerSample;
+    coeffs[tau - tauMin] = coeff;
+    if (coeff > globalBest) globalBest = coeff;
+  }
+  if (globalBest < 0.3) return null;
+
+  // Smallest local-maximum tau within 85% of the global best.
+  const acceptance = globalBest * 0.85;
+  let bestTau = -1;
+  for (let i = 1; i < span - 1; i++) {
+    const c = coeffs[i];
+    if (c >= acceptance && c >= coeffs[i - 1] && c >= coeffs[i + 1]) {
+      bestTau = i + tauMin;
+      break;
     }
   }
-  if (bestTau < 0 || r0 === 0) return null;
-
-  const normalized = bestCorr / r0;
-  if (normalized < 0.3) return null;
-
-  const tauL = bestTau - 1;
-  const tauR = bestTau + 1;
-  if (tauL >= tauMin && tauR <= tauMax) {
-    let cL = 0;
-    let cR = 0;
-    const limit = buf.length - tauR;
-    for (let i = 0; i < limit; i++) {
-      cL += buf[i] * buf[i + tauL];
-      cR += buf[i] * buf[i + tauR];
+  if (bestTau < 0) {
+    // No clean local max — fall back to global argmax. Rare in practice.
+    for (let i = 0; i < span; i++) {
+      if (coeffs[i] === globalBest) { bestTau = i + tauMin; break; }
     }
-    const denom = 2 * (cL - 2 * bestCorr + cR);
+  }
+
+  // Parabolic interpolation using the cached coefficient triple.
+  const idx = bestTau - tauMin;
+  if (idx > 0 && idx < span - 1) {
+    const nL = coeffs[idx - 1];
+    const nC = coeffs[idx];
+    const nR = coeffs[idx + 1];
+    const denom = 2 * (nL - 2 * nC + nR);
     if (Math.abs(denom) > 1e-9) {
-      const shift = (cL - cR) / denom;
+      const shift = (nL - nR) / denom;
       const refinedTau = bestTau + shift;
       if (refinedTau > 0) return sampleRate / refinedTau;
     }

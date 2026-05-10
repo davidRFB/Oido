@@ -15,6 +15,17 @@ function sine(buf, freqHz, sampleRate, amplitude = 0.5) {
   }
 }
 
+// Mulberry32 PRNG so noise-bearing tests are reproducible.
+function rng(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6D2B79F5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 describe("autocorrelateF0", () => {
   it("returns null for null/empty buffers", () => {
     expect(autocorrelateF0(null, 48000, 70, 500)).toBeNull();
@@ -57,6 +68,45 @@ describe("autocorrelateF0", () => {
     const f0 = autocorrelateF0(buf, 44100, 70, 500);
     expect(f0).not.toBeNull();
     expect(Math.abs(f0 - 180)).toBeLessThan(2);
+  });
+
+  it("locks onto the fundamental, not a harmonic, even with added noise (lag-bias regression)", () => {
+    // Real speech has a fundamental + harmonics + noise. Without per-pair
+    // normalization, autocorrelation prefers the smallest tau in the search
+    // range and locks onto the high end (manifested as 500 Hz on real audio).
+    const buf = new Float32Array(4096);
+    const r = rng(42);
+    for (let i = 0; i < buf.length; i++) {
+      const t = i / 48000;
+      buf[i] =
+        0.5 * Math.sin(2 * Math.PI * 130 * t) +   // fundamental
+        0.3 * Math.sin(2 * Math.PI * 260 * t) +   // 2nd harmonic
+        0.2 * Math.sin(2 * Math.PI * 390 * t) +   // 3rd harmonic
+        0.05 * (r() * 2 - 1);                     // noise
+    }
+    const f0 = autocorrelateF0(buf, 48000, 70, 500);
+    expect(f0).not.toBeNull();
+    expect(Math.abs(f0 - 130)).toBeLessThan(3);
+  });
+
+  it("does not pick a sub-octave when integer-period peaks are tied (octave-error regression)", () => {
+    // 250 Hz at 48 kHz lands on integer period (192 samples). Peaks at
+    // 192, 384, 576 are all theoretically tied at +1, and float rounding
+    // slightly favors the larger τ — without the lowest-octave-bias fix
+    // the detector reports ~167 Hz (sub-octave) instead of 250 Hz.
+    const buf = new Float32Array(4096);
+    sine(buf, 250, 48000);
+    const f0 = autocorrelateF0(buf, 48000, 70, 500);
+    expect(f0).not.toBeNull();
+    expect(Math.abs(f0 - 250)).toBeLessThan(2);
+  });
+
+  it("returns null for low-energy buffers below the voicing threshold", () => {
+    // Quiet noise should not be reported as voiced — it pollutes the median.
+    const buf = new Float32Array(4096);
+    const r = rng(1);
+    for (let i = 0; i < buf.length; i++) buf[i] = 0.005 * (r() * 2 - 1);
+    expect(autocorrelateF0(buf, 48000, 70, 500)).toBeNull();
   });
 });
 
