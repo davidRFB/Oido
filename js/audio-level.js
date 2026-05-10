@@ -16,6 +16,8 @@ import {
   AUDIO_GATE_THRESHOLD,
   AUDIO_GATE_WINDOW_MS,
   AUDIO_RING_CAPACITY,
+  MONITOR_DEGRADED_GRACE_MS,
+  MONITOR_DEGRADED_FLOOR_RMS,
 } from "./config.js";
 import { dlog, updateGateStats } from "./debug.js";
 
@@ -33,6 +35,9 @@ let ring = [];
 let ringIdx = 0;
 let monitorState = "idle"; // idle | starting | running | failed
 let currentLevel = 0;
+let monitorStartedAt = null;
+let monitorMaxEver = 0;
+let degradedReported = false;
 
 /**
  * Pure helper. Given samples sorted by time, return the max rms whose
@@ -75,6 +80,7 @@ function tick() {
   analyser.getFloatTimeDomainData(dataArray);
   const rms = computeRms(dataArray);
   currentLevel = rms;
+  if (rms > monitorMaxEver) monitorMaxEver = rms;
   pushSample(performance.now(), rms);
   rafId = requestAnimationFrame(tick);
 }
@@ -106,6 +112,9 @@ export async function startAudioLevelMonitor() {
     dataArray = new Float32Array(analyser.fftSize);
     mediaStreamSource.connect(analyser);
     monitorState = "running";
+    monitorStartedAt = performance.now();
+    monitorMaxEver = 0;
+    degradedReported = false;
     rafId = requestAnimationFrame(tick);
     return true;
   } catch (_e) {
@@ -149,6 +158,21 @@ export function stopAudioLevelMonitor() {
   ringIdx = 0;
   currentLevel = 0;
   monitorState = "idle";
+  monitorStartedAt = null;
+  monitorMaxEver = 0;
+  degradedReported = false;
+}
+
+/**
+ * Pure helper. Returns true when the monitor has been running long enough
+ * that any real mic should have observed at least floor RMS, but the actual
+ * peak-ever stayed below that floor. Indicates a degraded analyser stream
+ * (Safari/iOS or some Samsung Chrome with parallel getUserMedia conflict).
+ */
+export function isMonitorStreamDegraded(nowMs, startedAt, maxEver, graceMs, floor) {
+  if (startedAt === null || startedAt === undefined) return false;
+  if (nowMs - startedAt < graceMs) return false;
+  return maxEver < floor;
 }
 
 /**
@@ -173,6 +197,28 @@ export function getSharedMediaStreamSource() {
  */
 export function shouldSend() {
   if (monitorState !== "running") return true;
+  // Degraded-stream bypass: if the analyser has been running for the grace
+  // period and never observed real signal, the underlying getUserMedia
+  // stream is silent (mic conflict with webkitSpeechRecognition on
+  // Safari/iOS or some Samsung builds). Trust the recognizer and let the
+  // transcript through.
+  if (isMonitorStreamDegraded(
+    performance.now(), monitorStartedAt, monitorMaxEver,
+    MONITOR_DEGRADED_GRACE_MS, MONITOR_DEGRADED_FLOOR_RMS,
+  )) {
+    if (!degradedReported) {
+      dlog("gate", "degraded stream — peak " + monitorMaxEver.toFixed(5) + " < floor; failing open");
+      degradedReported = true;
+    }
+    updateGateStats({
+      rms: monitorMaxEver,
+      ambient: null,
+      multiplier: null,
+      threshold: AUDIO_GATE_THRESHOLD,
+      gate: "DEGRADED",
+    });
+    return true;
+  }
   const max = maxLevelInWindow(ring, performance.now(), AUDIO_GATE_WINDOW_MS);
   if (max === null) return true;
   const open = max >= AUDIO_GATE_THRESHOLD;
@@ -185,6 +231,25 @@ export function shouldSend() {
     gate: open ? "OPEN" : "CLOSED",
   });
   return open;
+}
+
+/**
+ * Read-only getter for the diagnostic UI. Returns true when the monitor is
+ * running but its stream looks degraded.
+ */
+export function isMonitorDegraded() {
+  if (monitorState !== "running") return false;
+  return isMonitorStreamDegraded(
+    performance.now(), monitorStartedAt, monitorMaxEver,
+    MONITOR_DEGRADED_GRACE_MS, MONITOR_DEGRADED_FLOOR_RMS,
+  );
+}
+
+/**
+ * Read-only getter — peak RMS observed since the monitor last started.
+ */
+export function getMonitorPeakEver() {
+  return monitorMaxEver;
 }
 
 /**
@@ -209,4 +274,15 @@ export function _resetForTest() {
   ringIdx = 0;
   monitorState = "idle";
   currentLevel = 0;
+  monitorStartedAt = null;
+  monitorMaxEver = 0;
+  degradedReported = false;
+}
+
+export function _setMonitorStateForTest(opts) {
+  if (opts && typeof opts === "object") {
+    if (opts.startedAt !== undefined) monitorStartedAt = opts.startedAt;
+    if (opts.maxEver !== undefined) monitorMaxEver = opts.maxEver;
+    if (opts.state !== undefined) monitorState = opts.state;
+  }
 }

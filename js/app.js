@@ -24,7 +24,13 @@ import {
   saveUserProfile,
 } from "./chat.js";
 import { isSupported, toggleListening, stopListening, getIsListening } from "./speech.js";
-import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
+import {
+  startAudioLevelMonitor,
+  shouldSend,
+  getCurrentLevel,
+  isMonitorDegraded,
+  getMonitorPeakEver,
+} from "./audio-level.js";
 import {
   startPitchDetector,
   getRecentPitchSamples,
@@ -240,6 +246,16 @@ async function refreshDiagnostics() {
 
   const listening = getIsListening();
   const vp = loadVoiceprint();
+  const degraded = isMonitorDegraded();
+  const peakEver = getMonitorPeakEver();
+  const gateRow = degraded
+    ? rowHTML("Filtro de audio", "Degradado (bypass)", "diag-warn")
+    : rowHTML("Filtro de audio", "Activo", "diag-ok");
+  const peakRow = rowHTML(
+    "Pico de mic registrado",
+    peakEver > 0 ? peakEver.toFixed(4) : "0",
+    peakEver > 0.005 ? "diag-ok" : "diag-warn",
+  );
   const stateRows = [
     rowHTML("Modo solo lectura", currentUser && currentUser.readOnly ? "Sí" : "No",
       currentUser && currentUser.readOnly ? "diag-warn" : "diag-ok"),
@@ -247,6 +263,8 @@ async function refreshDiagnostics() {
       vp ? "diag-ok" : "diag-warn"),
     rowHTML("Escuchando", listening ? "Sí" : "No", listening ? "diag-ok" : "diag-warn"),
     rowHTML("Estado del micrófono", micStatus.textContent || "—"),
+    gateRow,
+    peakRow,
   ];
   diagState.innerHTML = stateRows.join("");
 
