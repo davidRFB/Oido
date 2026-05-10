@@ -30,6 +30,22 @@ export const DEDUP_RING_SIZE = 10;
 export const DEDUP_LEN_RATIO_MAX = 0.30;
 export const DEDUP_LEV_RATIO_MAX = 0.25;
 
+// Pitch fingerprint (Feature D). Each phone learns its owner's pitch band
+// during enrollment and drops final transcripts whose recent median F0 falls
+// outside owner.f0_mean +/- PITCH_TOLERANCE_STDDEV * owner.f0_stddev.
+export const PITCH_F0_MIN = 70;            // Hz, below typical adult male F0
+export const PITCH_F0_MAX = 500;           // Hz, above typical child F0
+export const PITCH_FFT_SIZE = 4096;        // longer buffer needed for low-F0 accuracy
+export const PITCH_RING_CAPACITY = 384;    // ~6s of samples at 60fps
+export const PITCH_WINDOW_MS = 1500;       // window queried at gate time
+export const PITCH_MIN_SAMPLES = 8;        // below this, default-allow (insufficient data)
+export const PITCH_TOLERANCE_STDDEV = 2.5; // band half-width in stddevs
+export const PITCH_VOICED_RMS = 0.005;     // below this RMS, treat the buffer as silence
+
+// Voice enrollment.
+export const ENROLLMENT_DURATION_MS = 5000;
+export const ENROLLMENT_MIN_SAMPLES = 24;
+
 // Firebase configuration - REPLACE with your own config
 // See CLAUDE.md for setup instructions
 export const firebaseConfig = {

@@ -2,6 +2,7 @@ import { validatePassword, createUser, saveUser, loadUser, getColorPalette, getO
 import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage, clearMessages, onMessagesCleared, saveUserProfile } from "./chat.js";
 import { isSupported, toggleListening } from "./speech.js";
 import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
+import { startPitchDetector } from "./pitch.js";
 import { shouldRenderIncoming } from "./dedup.js";
 import { AUDIO_GATE_THRESHOLD } from "./config.js";
 import { dlog, initDebugOverlay, bumpCounter } from "./debug.js";
@@ -165,8 +166,11 @@ function enterChat() {
 
   // Persistent mic for the audio gate. Soft-fails on iOS and on denial —
   // shouldSend() returns true when the monitor isn't running, so the app
-  // keeps working with the gate effectively bypassed.
-  startAudioLevelMonitor().catch(() => { /* gate stays open */ });
+  // keeps working with the gate effectively bypassed. The pitch detector
+  // attaches to the same audio graph; it also soft-fails open.
+  startAudioLevelMonitor()
+    .then((ok) => { if (ok) startPitchDetector(); })
+    .catch(() => { /* gate stays open, pitch detector stays idle */ });
   startMicLevelBarLoop();
 
   // Listen for messages
