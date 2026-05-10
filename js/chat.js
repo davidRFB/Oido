@@ -5,6 +5,7 @@ let messagesRef = null;
 let presenceRef = null;
 let userPresenceRef = null;
 let clearedAtRef = null;
+let usersRef = null;
 
 /**
  * Initialize Firebase and connect to the room.
@@ -23,6 +24,7 @@ export function initFirebase() {
   messagesRef = firebase.ref(db, "rooms/default/messages");
   presenceRef = firebase.ref(db, "rooms/default/presence");
   clearedAtRef = firebase.ref(db, "rooms/default/clearedAt");
+  usersRef = firebase.ref(db, "rooms/default/users");
 }
 
 /**
@@ -45,20 +47,24 @@ export function sendMessage(user, text, isFinal = true) {
 }
 
 /**
- * Format a message object.
- * @param {{ name: string, color: string }} user
+ * Format a message object. The userId field is included when the user object
+ * carries one — old peers running prior builds receive it as an unused field
+ * and the renderer ignores it, so this stays backwards-compatible.
+ * @param {{ name: string, color: string, userId?: string }} user
  * @param {string} text
  * @param {boolean} isFinal
- * @returns {{ name: string, color: string, text: string, isFinal: boolean, timestamp: number }}
+ * @returns {{ name: string, color: string, text: string, isFinal: boolean, timestamp: number, userId?: string }}
  */
 export function formatMessage(user, text, isFinal) {
-  return {
+  const msg = {
     name: user.name,
     color: user.color,
     text: text,
     isFinal: isFinal,
     timestamp: Date.now(),
   };
+  if (user.userId) msg.userId = user.userId;
+  return msg;
 }
 
 /**
@@ -109,8 +115,29 @@ export function onMessage(callback) {
 }
 
 /**
+ * Write or update this device's user profile under rooms/default/users/{userId}.
+ * The voiceprint sub-tree is added by a later commit; today we just persist
+ * the display fields so other clients can resolve a userId to name + color.
+ * No-op when Firebase is offline (offline mode dispatches local events only).
+ * @param {{ userId: string, name: string, color: string, voiceprint?: object }} profile
+ * @returns {Promise<void>}
+ */
+export async function saveUserProfile(profile) {
+  if (!usersRef) return;
+  if (!profile || !profile.userId) return;
+  const payload = {
+    name: profile.name,
+    color: profile.color,
+    updatedAt: Date.now(),
+  };
+  if (profile.voiceprint) payload.voiceprint = profile.voiceprint;
+  const ref = firebase.ref(db, "rooms/default/users/" + profile.userId);
+  await firebase.set(ref, payload);
+}
+
+/**
  * Register user presence in the room.
- * @param {{ name: string, color: string }} user
+ * @param {{ name: string, color: string, userId?: string }} user
  * @param {function} onPresenceChange - called with array of connected users
  */
 export function registerPresence(user, onPresenceChange) {
@@ -122,11 +149,13 @@ export function registerPresence(user, onPresenceChange) {
   firebase.onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
       firebase.onDisconnect(userPresenceRef).remove();
-      firebase.set(userPresenceRef, {
+      const record = {
         name: user.name,
         color: user.color,
         joinedAt: Date.now(),
-      });
+      };
+      if (user.userId) record.userId = user.userId;
+      firebase.set(userPresenceRef, record);
     }
   });
 

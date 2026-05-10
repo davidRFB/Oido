@@ -1,5 +1,5 @@
-import { validatePassword, createUser, saveUser, loadUser, getColorPalette } from "./auth.js";
-import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage, clearMessages, onMessagesCleared } from "./chat.js";
+import { validatePassword, createUser, saveUser, loadUser, getColorPalette, getOrCreateUserId } from "./auth.js";
+import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage, clearMessages, onMessagesCleared, saveUserProfile } from "./chat.js";
 import { isSupported, toggleListening } from "./speech.js";
 import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
 import { shouldRenderIncoming } from "./dedup.js";
@@ -124,6 +124,7 @@ function handleSetup() {
     return;
   }
   setupError.textContent = "";
+  user.userId = getOrCreateUserId();
   currentUser = user;
   saveUser(user);
   enterChat();
@@ -155,6 +156,12 @@ function enterChat() {
   showScreen(chatScreen);
   initFirebase();
   initDebugOverlay();
+
+  // Best-effort profile sync so peers can resolve userId -> name/color.
+  // Failures (offline, rules) are logged but don't block entering chat.
+  saveUserProfile(currentUser).catch((err) => {
+    console.warn("saveUserProfile failed:", err);
+  });
 
   // Persistent mic for the audio gate. Soft-fails on iOS and on denial —
   // shouldSend() returns true when the monitor isn't running, so the app
