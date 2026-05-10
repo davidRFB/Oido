@@ -1,7 +1,8 @@
-import { ROOM_PASSWORD_HASH, COLOR_PALETTE } from "./config.js";
+import { ROOM_PASSWORD_HASH, COLOR_PALETTE, ENROLLMENT_MIN_SAMPLES } from "./config.js";
 
 const LOCAL_KEY = "oido_user";
 const LOCAL_USER_ID_KEY = "oido_user_id";
+const LOCAL_VOICEPRINT_KEY = "oido_voiceprint";
 
 /**
  * Hash a string using SHA-256 via Web Crypto API.
@@ -82,6 +83,54 @@ export function getOrCreateUserId() {
   const fresh = crypto.randomUUID();
   localStorage.setItem(LOCAL_USER_ID_KEY, fresh);
   return fresh;
+}
+
+/**
+ * Persist this device's voiceprint (mean F0 + sample stddev + count) so the
+ * pitch gate can suppress crosstalk without re-running enrollment every visit.
+ * @param {{ f0_mean: number, f0_stddev: number, f0_samples: number, enrolled_at?: number }} profile
+ */
+export function saveVoiceprint(profile) {
+  if (!profile) return;
+  if (typeof profile.f0_mean !== "number" || typeof profile.f0_stddev !== "number") return;
+  if (typeof profile.f0_samples !== "number") return;
+  localStorage.setItem(LOCAL_VOICEPRINT_KEY, JSON.stringify(profile));
+}
+
+/**
+ * Read the stored voiceprint. Returns null when missing or shape-invalid so
+ * callers can default-allow.
+ * @returns {{ f0_mean: number, f0_stddev: number, f0_samples: number, enrolled_at?: number } | null}
+ */
+export function loadVoiceprint() {
+  const data = localStorage.getItem(LOCAL_VOICEPRINT_KEY);
+  if (!data) return null;
+  try {
+    const v = JSON.parse(data);
+    if (
+      v &&
+      typeof v.f0_mean === "number" &&
+      typeof v.f0_stddev === "number" &&
+      typeof v.f0_samples === "number"
+    ) {
+      return v;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether this device should run enrollment before entering chat. True if no
+ * voiceprint is stored or the stored sample count is below the enrollment
+ * threshold (which would have produced an unreliable band).
+ * @returns {boolean}
+ */
+export function needsEnrollment() {
+  const v = loadVoiceprint();
+  if (!v) return true;
+  return v.f0_samples < ENROLLMENT_MIN_SAMPLES;
 }
 
 /**

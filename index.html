@@ -51,7 +51,24 @@
     <button class="btn" id="setup-btn">Unirse</button>
   </div>
 
-  <!-- Screen 3: Chat Room -->
+  <!-- Screen 3: Voice Enrollment -->
+  <div id="enrollment-screen" class="screen">
+    <h2>Tu voz</h2>
+    <p class="enrollment-instruction">Lee esta frase en voz alta para que la app reconozca tu voz</p>
+    <p class="enrollment-phrase" id="enrollment-phrase">El veloz murcielago hindu comia feliz cardillo y kiwi.</p>
+    <div class="mic-level-bar enrollment-bar">
+      <div class="mic-level-bar-fill" id="enrollment-level-bar-fill"></div>
+    </div>
+    <p class="enrollment-status" id="enrollment-status">Toca grabar y lee la frase</p>
+    <p class="enrollment-pitch" id="enrollment-pitch"></p>
+    <div class="error-text" id="enrollment-error"></div>
+    <div class="enrollment-buttons">
+      <button class="btn" id="enrollment-record-btn">Grabar (5s)</button>
+      <button class="btn" id="enrollment-continue-btn" disabled>Continuar</button>
+    </div>
+  </div>
+
+  <!-- Screen 4: Chat Room -->
   <div id="chat-screen" class="screen">
     <div class="chat-header">
       <h2>Oido</h2>

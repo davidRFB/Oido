@@ -7,7 +7,11 @@ import {
   getColorPalette,
   getUserId,
   getOrCreateUserId,
+  saveVoiceprint,
+  loadVoiceprint,
+  needsEnrollment,
 } from "../js/auth.js";
+import { ENROLLMENT_MIN_SAMPLES } from "../js/config.js";
 
 describe("validatePassword", () => {
   it("accepts the correct password", async () => {
@@ -115,6 +119,58 @@ describe("getUserId / getOrCreateUserId", () => {
   it("getUserId reads back what getOrCreateUserId wrote", () => {
     const id = getOrCreateUserId();
     expect(getUserId()).toBe(id);
+  });
+});
+
+describe("voiceprint persistence", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("returns null when no voiceprint is stored", () => {
+    expect(loadVoiceprint()).toBeNull();
+  });
+
+  it("round-trips a saved voiceprint", () => {
+    const profile = { f0_mean: 180, f0_stddev: 22, f0_samples: 30, enrolled_at: 12345 };
+    saveVoiceprint(profile);
+    expect(loadVoiceprint()).toEqual(profile);
+  });
+
+  it("rejects shape-invalid stored data", () => {
+    localStorage.setItem("oido_voiceprint", JSON.stringify({ junk: 1 }));
+    expect(loadVoiceprint()).toBeNull();
+  });
+
+  it("rejects corrupted JSON", () => {
+    localStorage.setItem("oido_voiceprint", "not-json");
+    expect(loadVoiceprint()).toBeNull();
+  });
+
+  it("ignores save calls with bad shape", () => {
+    saveVoiceprint(null);
+    saveVoiceprint({ f0_mean: "nope", f0_stddev: 22, f0_samples: 30 });
+    expect(loadVoiceprint()).toBeNull();
+  });
+});
+
+describe("needsEnrollment", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("returns true when no voiceprint is stored", () => {
+    expect(needsEnrollment()).toBe(true);
+  });
+
+  it("returns true when stored sample count is below the threshold", () => {
+    saveVoiceprint({ f0_mean: 180, f0_stddev: 22, f0_samples: ENROLLMENT_MIN_SAMPLES - 1, enrolled_at: 1 });
+    expect(needsEnrollment()).toBe(true);
+  });
+
+  it("returns false once a full-sample voiceprint is stored", () => {
+    saveVoiceprint({ f0_mean: 180, f0_stddev: 22, f0_samples: ENROLLMENT_MIN_SAMPLES, enrolled_at: 1 });
+    expect(needsEnrollment()).toBe(false);
   });
 });
 

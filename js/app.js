@@ -1,15 +1,39 @@
-import { validatePassword, createUser, saveUser, loadUser, getColorPalette, getOrCreateUserId } from "./auth.js";
-import { initFirebase, sendMessage, onMessage, registerPresence, renderMessage, clearMessages, onMessagesCleared, saveUserProfile } from "./chat.js";
+import {
+  validatePassword,
+  createUser,
+  saveUser,
+  loadUser,
+  getColorPalette,
+  getOrCreateUserId,
+  saveVoiceprint,
+  loadVoiceprint,
+  needsEnrollment,
+} from "./auth.js";
+import {
+  initFirebase,
+  sendMessage,
+  onMessage,
+  registerPresence,
+  renderMessage,
+  clearMessages,
+  onMessagesCleared,
+  saveUserProfile,
+} from "./chat.js";
 import { isSupported, toggleListening } from "./speech.js";
 import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
-import { startPitchDetector } from "./pitch.js";
+import { startPitchDetector, getRecentPitchSamples, getRecentPitchStats } from "./pitch.js";
 import { shouldRenderIncoming } from "./dedup.js";
-import { AUDIO_GATE_THRESHOLD } from "./config.js";
+import {
+  AUDIO_GATE_THRESHOLD,
+  ENROLLMENT_DURATION_MS,
+  ENROLLMENT_MIN_SAMPLES,
+} from "./config.js";
 import { dlog, initDebugOverlay, bumpCounter } from "./debug.js";
 
 // DOM elements
 const passwordScreen = document.getElementById("password-screen");
 const setupScreen = document.getElementById("setup-screen");
+const enrollmentScreen = document.getElementById("enrollment-screen");
 const chatScreen = document.getElementById("chat-screen");
 
 const passwordInput = document.getElementById("password-input");
@@ -21,6 +45,13 @@ const colorPicker = document.getElementById("color-picker");
 const readonlyToggle = document.getElementById("readonly-toggle");
 const setupBtn = document.getElementById("setup-btn");
 const setupError = document.getElementById("setup-error");
+
+const enrollmentRecordBtn = document.getElementById("enrollment-record-btn");
+const enrollmentContinueBtn = document.getElementById("enrollment-continue-btn");
+const enrollmentStatus = document.getElementById("enrollment-status");
+const enrollmentPitch = document.getElementById("enrollment-pitch");
+const enrollmentError = document.getElementById("enrollment-error");
+const enrollmentLevelBarFill = document.getElementById("enrollment-level-bar-fill");
 
 const chatMessages = document.getElementById("chat-messages");
 const chatFooter = document.querySelector(".chat-footer");
@@ -73,7 +104,7 @@ clearBtn.addEventListener("click", async () => {
 // ===== Screen Navigation =====
 
 function showScreen(screen) {
-  [passwordScreen, setupScreen, chatScreen].forEach((s) => s.classList.remove("active"));
+  [passwordScreen, setupScreen, enrollmentScreen, chatScreen].forEach((s) => s.classList.remove("active"));
   screen.classList.add("active");
 }
 
@@ -84,8 +115,18 @@ async function handlePassword() {
   passwordBtn.disabled = true;
   if (await validatePassword(value)) {
     passwordError.textContent = "";
-    showScreen(setupScreen);
-    nameInput.focus();
+    // Returning user — name + color survived in localStorage. Skip setup, and
+    // skip enrollment too if they're either read-only or already have a saved
+    // voiceprint. This is the no-friction repeat-visit path.
+    const savedUser = loadUser();
+    if (savedUser && (savedUser.readOnly || loadVoiceprint())) {
+      savedUser.userId = getOrCreateUserId();
+      currentUser = savedUser;
+      enterChat();
+    } else {
+      showScreen(setupScreen);
+      nameInput.focus();
+    }
   } else {
     passwordError.textContent = "Clave incorrecta";
     passwordInput.value = "";
@@ -118,7 +159,7 @@ function renderColorPicker() {
   });
 }
 
-function handleSetup() {
+async function handleSetup() {
   const user = createUser(nameInput.value, selectedColor, readonlyToggle.checked);
   if (!user) {
     setupError.textContent = "Ingresa tu nombre y elige un color";
@@ -128,7 +169,28 @@ function handleSetup() {
   user.userId = getOrCreateUserId();
   currentUser = user;
   saveUser(user);
-  enterChat();
+
+  // Read-only users (deaf family member) don't speak, so they skip enrollment.
+  if (user.readOnly || !needsEnrollment()) {
+    enterChat();
+    return;
+  }
+
+  showScreen(enrollmentScreen);
+  enrollmentError.textContent = "";
+  enrollmentPitch.textContent = "";
+  enrollmentRecordBtn.disabled = true;
+  enrollmentContinueBtn.disabled = true;
+  enrollmentStatus.textContent = "Iniciando microfono...";
+  startEnrollmentLevelLoop();
+  // Prime the shared mic + pitch detector here so the recording is ready
+  // before the user taps Grabar. Soft-fails report a friendly error.
+  const ok = await startAudioLevelMonitor();
+  if (ok) startPitchDetector();
+  enrollmentStatus.textContent = ok
+    ? "Toca grabar y lee la frase"
+    : "Microfono no disponible. Revisa permisos.";
+  enrollmentRecordBtn.disabled = !ok;
 }
 
 setupBtn.addEventListener("click", handleSetup);
@@ -137,6 +199,79 @@ nameInput.addEventListener("keydown", (e) => {
 });
 
 renderColorPicker();
+
+// ===== Enrollment Screen =====
+
+let pendingVoiceprint = null;
+
+function startEnrollmentLevelLoop() {
+  if (!enrollmentLevelBarFill) return;
+  const tick = () => {
+    if (!enrollmentScreen.classList.contains("active")) return;
+    const lvl = getCurrentLevel();
+    enrollmentLevelBarFill.style.width = Math.min(100, Math.round(lvl * 200)) + "%";
+    enrollmentLevelBarFill.classList.toggle("above-threshold", lvl >= AUDIO_GATE_THRESHOLD);
+    const stats = getRecentPitchStats(500);
+    if (stats.median !== null) {
+      enrollmentPitch.textContent = Math.round(stats.median) + " Hz";
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+async function handleEnrollmentRecord() {
+  enrollmentError.textContent = "";
+  enrollmentRecordBtn.disabled = true;
+  enrollmentContinueBtn.disabled = true;
+  pendingVoiceprint = null;
+
+  const total = ENROLLMENT_DURATION_MS;
+  const startedAt = performance.now();
+  enrollmentStatus.textContent = "Habla... " + Math.ceil(total / 1000);
+  const interval = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((total - (performance.now() - startedAt)) / 1000));
+    enrollmentStatus.textContent = remaining > 0 ? "Habla... " + remaining : "Procesando...";
+  }, 250);
+
+  await new Promise((r) => setTimeout(r, total));
+  clearInterval(interval);
+
+  // The pitch ring filters by time, so passing the recording duration as the
+  // window naturally excludes anything observed before recording started.
+  const samples = getRecentPitchSamples(performance.now() - startedAt + 50);
+  if (samples.length < ENROLLMENT_MIN_SAMPLES) {
+    enrollmentError.textContent =
+      "Pocas muestras (" + samples.length + "). Intenta hablar mas fuerte o mas cerca del microfono.";
+    enrollmentStatus.textContent = "Toca grabar y lee la frase";
+    enrollmentRecordBtn.disabled = false;
+    return;
+  }
+
+  const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+  const variance = samples.reduce((a, b) => a + (b - mean) * (b - mean), 0) / samples.length;
+  const stddev = Math.sqrt(variance);
+  pendingVoiceprint = {
+    f0_mean: mean,
+    f0_stddev: stddev,
+    f0_samples: samples.length,
+    enrolled_at: Date.now(),
+  };
+
+  enrollmentStatus.textContent =
+    "Listo: " + Math.round(mean) + " Hz, " + samples.length + " muestras";
+  enrollmentRecordBtn.disabled = false;
+  enrollmentContinueBtn.disabled = false;
+}
+
+function handleEnrollmentContinue() {
+  if (!pendingVoiceprint) return;
+  saveVoiceprint(pendingVoiceprint);
+  enterChat();
+}
+
+enrollmentRecordBtn.addEventListener("click", handleEnrollmentRecord);
+enrollmentContinueBtn.addEventListener("click", handleEnrollmentContinue);
 
 // ===== Chat Screen =====
 
@@ -158,8 +293,15 @@ function enterChat() {
   initFirebase();
   initDebugOverlay();
 
-  // Best-effort profile sync so peers can resolve userId -> name/color.
-  // Failures (offline, rules) are logged but don't block entering chat.
+  // Mirror the local voiceprint into the user profile so peers can resolve
+  // userId -> name/color (and later, voiceprint when we want cross-device
+  // sync). Local pitch gate uses the localStorage copy directly — Firebase
+  // is not in the hot path.
+  const voiceprint = loadVoiceprint();
+  if (voiceprint) currentUser.voiceprint = voiceprint;
+
+  // Best-effort profile sync. Failures (offline, rules) are logged but don't
+  // block entering chat.
   saveUserProfile(currentUser).catch((err) => {
     console.warn("saveUserProfile failed:", err);
   });
@@ -306,9 +448,3 @@ micBtn.addEventListener("click", async () => {
   }
 });
 
-// ===== Auto-restore session =====
-const savedUser = loadUser();
-if (savedUser) {
-  // Skip password, but still show setup for color re-selection
-  // (they may want to change color)
-}
