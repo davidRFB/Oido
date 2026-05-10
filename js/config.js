@@ -16,29 +16,12 @@ export const COLOR_PALETTE = [
 // Audio gate (Feature A). RMS amplitude in [0,1]. Drops final speech results
 // when local mic was quiet — i.e., the speech came from another phone's owner
 // across the room, not this phone's owner.
-export const AUDIO_GATE_THRESHOLD = 0.05;
+export const AUDIO_GATE_THRESHOLD = 0.04;
 // Window must be longer than the recognizer's silence-before-final delay
 // (~1–2s on mobile) so the gate still sees the loud speech that triggered
 // the final result.
 export const AUDIO_GATE_WINDOW_MS = 3000;
-// Sized to hold ~10s of samples at ~60fps so the ambient-floor estimate has
-// enough history (60 * 10 = 600; 1024 leaves headroom).
-export const AUDIO_RING_CAPACITY = 1024;
-
-// Adaptive ambient floor: in noisy rooms the absolute threshold is too low,
-// so we also require speech to exceed the rolling floor by a multiplier.
-export const AMBIENT_WINDOW_MS = 10000;
-// p20 is robust against the speaker's own utterance bursts within the window.
-export const AMBIENT_FLOOR_PERCENTILE = 0.20;
-export const AMBIENT_MULTIPLIER = 2.5;
-
-// Interim stability auto-promote (Feature C). If interim text is unchanged
-// for INTERIM_STABLE_MS, treat it as final so the message lands ~1s sooner
-// than waiting for the engine's isFinal. INTERIM_AUTOPROMOTE_WINDOW_MS is how
-// long the auto-promoted text stays in a self-dedup ring to suppress the
-// engine's late final for the same utterance.
-export const INTERIM_STABLE_MS = 600;
-export const INTERIM_AUTOPROMOTE_WINDOW_MS = 4000;
+export const AUDIO_RING_CAPACITY = 256;
 
 // Cross-device dedup (Feature B). When a peer's message looks near-identical to
 // one received in the last DEDUP_WINDOW_MS from a different user, don't render.

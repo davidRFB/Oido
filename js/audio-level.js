@@ -16,9 +16,6 @@ import {
   AUDIO_GATE_THRESHOLD,
   AUDIO_GATE_WINDOW_MS,
   AUDIO_RING_CAPACITY,
-  AMBIENT_WINDOW_MS,
-  AMBIENT_FLOOR_PERCENTILE,
-  AMBIENT_MULTIPLIER,
 } from "./config.js";
 import { dlog, updateGateStats } from "./debug.js";
 
@@ -52,30 +49,6 @@ export function maxLevelInWindow(samples, nowMs, windowMs) {
     }
   }
   return max;
-}
-
-/**
- * Pure helper. Returns the p-th percentile (0..1) of in-window rms values, or
- * null if no samples are in window. Boundary t === nowMs - windowMs counts as
- * in-window. Uses nearest-rank (no interpolation) — robust enough for a noise
- * floor estimate and avoids edge cases with small sample counts.
- */
-export function percentileInWindow(samples, nowMs, windowMs, p) {
-  if (!samples || samples.length === 0) return null;
-  const cutoff = nowMs - windowMs;
-  const inWindow = [];
-  for (const s of samples) {
-    if (!s) continue;
-    if (s.t >= cutoff) inWindow.push(s.rms);
-  }
-  if (inWindow.length === 0) return null;
-  inWindow.sort((a, b) => a - b);
-  const clamped = Math.max(0, Math.min(1, p));
-  const idx = Math.min(
-    inWindow.length - 1,
-    Math.max(0, Math.ceil(clamped * inWindow.length) - 1),
-  );
-  return inWindow[idx];
 }
 
 function pushSample(t, rms) {
@@ -177,38 +150,21 @@ export function stopAudioLevelMonitor() {
 
 /**
  * Open by default — returns true on no data, startup race, or any failure.
- * Threshold is the larger of the absolute floor and (ambient_floor *
- * AMBIENT_MULTIPLIER), so the gate gets stricter in noisy rooms where the
- * absolute floor would otherwise let everything through.
  */
 export function shouldSend() {
   if (monitorState !== "running") return true;
-  const now = performance.now();
-  const max = maxLevelInWindow(ring, now, AUDIO_GATE_WINDOW_MS);
+  const max = maxLevelInWindow(ring, performance.now(), AUDIO_GATE_WINDOW_MS);
   if (max === null) return true;
-  const ambient = percentileInWindow(ring, now, AMBIENT_WINDOW_MS, AMBIENT_FLOOR_PERCENTILE);
-  const dynamic = ambient === null ? 0 : ambient * AMBIENT_MULTIPLIER;
-  const threshold = Math.max(AUDIO_GATE_THRESHOLD, dynamic);
-  const open = max >= threshold;
-  dlog("gate", { max: +max.toFixed(3), ambient: ambient === null ? null : +ambient.toFixed(3), threshold: +threshold.toFixed(3), open });
+  const open = max >= AUDIO_GATE_THRESHOLD;
+  dlog("gate", { max: +max.toFixed(3), threshold: AUDIO_GATE_THRESHOLD, open });
   updateGateStats({
     rms: max,
-    ambient: ambient,
-    multiplier: AMBIENT_MULTIPLIER,
-    threshold: threshold,
+    ambient: null,
+    multiplier: null,
+    threshold: AUDIO_GATE_THRESHOLD,
     gate: open ? "OPEN" : "CLOSED",
   });
   return open;
-}
-
-/**
- * Latest ambient-floor estimate (p20 over the last AMBIENT_WINDOW_MS).
- * Returns 0 if monitor isn't running or there's no data yet.
- */
-export function getAmbientFloor() {
-  if (monitorState !== "running") return 0;
-  const v = percentileInWindow(ring, performance.now(), AMBIENT_WINDOW_MS, AMBIENT_FLOOR_PERCENTILE);
-  return v === null ? 0 : v;
 }
 
 /**
