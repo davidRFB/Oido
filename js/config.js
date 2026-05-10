@@ -17,8 +17,11 @@ export const COLOR_PALETTE = [
 // when local mic was quiet — i.e., the speech came from another phone's owner
 // across the room, not this phone's owner.
 export const AUDIO_GATE_THRESHOLD = 0.10;
-export const AUDIO_GATE_WINDOW_MS = 1000;
-export const AUDIO_RING_CAPACITY = 128;
+// Window must be longer than the recognizer's silence-before-final delay
+// (~1–2s on mobile) so the gate still sees the loud speech that triggered
+// the final result.
+export const AUDIO_GATE_WINDOW_MS = 3000;
+export const AUDIO_RING_CAPACITY = 256;
 
 // Cross-device dedup (Feature B). When a peer's message looks near-identical to
 // one received in the last DEDUP_WINDOW_MS from a different user, don't render.
