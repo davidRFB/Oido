@@ -4,6 +4,14 @@
  * Uses non-continuous mode with auto-restart for mobile compatibility.
  */
 
+import { normalize, levenshtein } from "./dedup.js";
+import {
+  INTERIM_STABLE_MS,
+  INTERIM_AUTOPROMOTE_WINDOW_MS,
+  DEDUP_LEV_RATIO_MAX,
+} from "./config.js";
+import { dlog, bumpCounter } from "./debug.js";
+
 let recognition = null;
 let isListening = false;
 let restartTimer = null;
@@ -11,6 +19,53 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
   (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const MOBILE_RESTART_DELAY = 500; // ms to wait before restarting on mobile
+
+// Stability auto-promote state. lastInterimText is the text we're currently
+// debouncing; stabilityTimer fires when it has been unchanged for
+// INTERIM_STABLE_MS. autoPromoted is a small ring of {normText, t} entries
+// used to suppress the engine's late isFinal for text we already promoted.
+// promotedSinceLastFinal locks out further auto-promotes within the current
+// utterance — released when the engine finally fires isFinal.
+let lastInterimText = "";
+let stabilityTimer = null;
+let autoPromoted = [];
+let promotedSinceLastFinal = false;
+
+function clearStabilityTimer() {
+  if (stabilityTimer) {
+    clearTimeout(stabilityTimer);
+    stabilityTimer = null;
+  }
+}
+
+function resetStabilityState() {
+  clearStabilityTimer();
+  lastInterimText = "";
+  autoPromoted = [];
+  promotedSinceLastFinal = false;
+}
+
+/**
+ * Pure helper. Returns true if `text` matches a recently auto-promoted entry
+ * within INTERIM_AUTOPROMOTE_WINDOW_MS, using the same Levenshtein-ratio
+ * threshold as cross-user dedup.
+ */
+export function shouldSuppressFinal(ring, text, now) {
+  if (!ring || ring.length === 0) return false;
+  const norm = normalize(text);
+  if (norm.length === 0) return false;
+  for (const entry of ring) {
+    if (!entry) continue;
+    if (now - entry.t > INTERIM_AUTOPROMOTE_WINDOW_MS) continue;
+    const a = entry.normText;
+    const b = norm;
+    const maxLen = Math.max(a.length, b.length);
+    if (maxLen === 0) continue;
+    const dist = levenshtein(a, b);
+    if (dist / maxLen <= DEDUP_LEV_RATIO_MAX) return true;
+  }
+  return false;
+}
 
 /**
  * Check if the browser supports speech recognition.
@@ -37,9 +92,38 @@ function createRecognition(callbacks) {
       const text = result[0].transcript;
 
       if (result.isFinal) {
+        clearStabilityTimer();
+        lastInterimText = "";
+        const wasPromoted = promotedSinceLastFinal;
+        promotedSinceLastFinal = false;
+        if (wasPromoted && shouldSuppressFinal(autoPromoted, text, Date.now())) {
+          dlog("speech", "engine-final suppressed (already auto-promoted):", text);
+          bumpCounter("engineSuppressed", `eng-supp: ${text}`);
+          continue;
+        }
+        dlog("speech", "engine-final:", text);
         callbacks.onFinal?.(text);
       } else {
         callbacks.onInterim?.(text);
+        // Only schedule a new debounce if we haven't already promoted in this
+        // utterance — otherwise we'd auto-promote the same speech twice.
+        if (!promotedSinceLastFinal && text !== lastInterimText) {
+          lastInterimText = text;
+          clearStabilityTimer();
+          stabilityTimer = setTimeout(() => {
+            stabilityTimer = null;
+            const promotedText = lastInterimText;
+            lastInterimText = "";
+            const norm = normalize(promotedText);
+            if (norm.length === 0) return;
+            autoPromoted.push({ normText: norm, t: Date.now() });
+            if (autoPromoted.length > 8) autoPromoted.shift();
+            promotedSinceLastFinal = true;
+            dlog("speech", "auto-promote:", promotedText);
+            bumpCounter("autoPromote", `auto: ${promotedText}`);
+            callbacks.onFinal?.(promotedText);
+          }, INTERIM_STABLE_MS);
+        }
       }
     }
   };
@@ -51,6 +135,7 @@ function createRecognition(callbacks) {
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       isListening = false;
       recognition = null;
+      resetStabilityState();
       callbacks.onError?.({
         error: event.error,
         message: "Servicio de voz no disponible. Reinicia el navegador.",
@@ -160,6 +245,7 @@ export function stopListening() {
     clearTimeout(restartTimer);
     restartTimer = null;
   }
+  resetStabilityState();
   if (recognition) {
     try { recognition.stop(); } catch (_e) { /* ignore */ }
     recognition = null;

@@ -4,6 +4,7 @@ import { isSupported, toggleListening } from "./speech.js";
 import { startAudioLevelMonitor, shouldSend, getCurrentLevel } from "./audio-level.js";
 import { shouldRenderIncoming } from "./dedup.js";
 import { AUDIO_GATE_THRESHOLD } from "./config.js";
+import { dlog, initDebugOverlay, bumpCounter } from "./debug.js";
 
 // DOM elements
 const passwordScreen = document.getElementById("password-screen");
@@ -153,6 +154,7 @@ function startMicLevelBarLoop() {
 function enterChat() {
   showScreen(chatScreen);
   initFirebase();
+  initDebugOverlay();
 
   // Persistent mic for the audio gate. Soft-fails on iOS and on denial —
   // shouldSend() returns true when the monitor isn't running, so the app
@@ -171,7 +173,13 @@ function enterChat() {
     // the room. shouldRenderIncoming records into the ring even when it
     // returns false, so a third device's copy is suppressed too.
     if (message.isFinal && !shouldRenderIncoming(message, currentUser.name)) {
+      dlog("recv", "DEDUP-DROP", message.name, message.text);
+      bumpCounter("dropped", `dedup-drop: ${message.name}: ${message.text}`);
       return;
+    }
+    if (message.isFinal) {
+      dlog("recv", message.name, message.text);
+      bumpCounter("recv", `recv: ${message.name}: ${message.text}`);
     }
     renderMessage(chatMessages, message);
   });
@@ -250,7 +258,13 @@ micBtn.addEventListener("click", async () => {
       }
       // Drop transcripts captured while local mic was quiet — almost
       // certainly someone else's voice picked up across the room.
-      if (!shouldSend()) return;
+      if (!shouldSend()) {
+        dlog("send", "GATE-DROP", text);
+        bumpCounter("dropped", `gate-drop: ${text}`);
+        return;
+      }
+      dlog("send", text);
+      bumpCounter("sent", `sent: ${text}`);
       sendMessage(currentUser, text, true);
     },
 
